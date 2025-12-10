@@ -36,7 +36,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       text: settings.minPeakThreshold.toStringAsFixed(1),
     );
     _maxPeakThresholdController = TextEditingController(
-      text: '200.0',  // Default max threshold
+      text: settings.maxPeakThreshold.toStringAsFixed(1),
     );
     _surveyNameController = TextEditingController(
       text: settings.surveyName,
@@ -66,6 +66,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     final wheelDiameterMm = double.tryParse(_wheelDiameterController.text);
     final minPeakThreshold = double.tryParse(_minPeakThresholdController.text);
+    final maxPeakThreshold = double.tryParse(_maxPeakThresholdController.text);
 
     if (wheelDiameterMm == null || wheelDiameterMm <= 0) {
       _showError('Wheel diameter must be a positive number');
@@ -73,13 +74,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     if (minPeakThreshold == null || minPeakThreshold < 0) {
-      _showError('Peak threshold must be a non-negative number');
+      _showError('Min peak threshold must be a non-negative number');
+      return;
+    }
+
+    if (maxPeakThreshold == null || maxPeakThreshold < 0) {
+      _showError('Max peak threshold must be a non-negative number');
+      return;
+    }
+
+    if (maxPeakThreshold <= minPeakThreshold) {
+      _showError('Max threshold must be greater than min threshold');
       return;
     }
 
     // Convert mm to meters for storage
     settings.updateWheelDiameter(wheelDiameterMm / 1000);
     settings.updateMinPeakThreshold(minPeakThreshold);
+    settings.updateMaxPeakThreshold(maxPeakThreshold);
     settings.updateSurveyName(_surveyNameController.text);
 
     final storageService = context.read<StorageService>();

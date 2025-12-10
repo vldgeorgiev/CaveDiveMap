@@ -73,6 +73,7 @@ class CaveDiveMapApp extends StatelessWidget {
             service.updateSettings(
               wheelCircumference: settings.wheelCircumference,
               minPeakThreshold: settings.minPeakThreshold,
+              maxPeakThreshold: settings.maxPeakThreshold,
             );
             return service;
           },

@@ -27,10 +27,10 @@ class MagnetometerService extends ChangeNotifier {
 
   // Settings
   double _wheelCircumference = 0.263; // meters
-  double _peakThreshold = 50.0;       // μT
-  bool _inPeak = false;
+  double _minPeakThreshold = 50.0;    // μT - must drop below this to reset
+  double _maxPeakThreshold = 100.0;   // μT - must exceed this to trigger peak
+  bool _isReadyForNewPeak = true;     // State tracker for peak detection
   int _rotationCount = 0;
-  double _lastMagnitude = 0.0;        // Last magnitude for peak detection
 
   // Statistics
   DateTime? _lastRotationTime;
@@ -111,9 +111,14 @@ class MagnetometerService extends ChangeNotifier {
   }
 
   /// Update settings from Settings model
-  void updateSettings({required double wheelCircumference, required double minPeakThreshold}) {
+  void updateSettings({
+    required double wheelCircumference,
+    required double minPeakThreshold,
+    required double maxPeakThreshold,
+  }) {
     _wheelCircumference = wheelCircumference; // Circumference passed in (pre-calculated)
-    _peakThreshold = minPeakThreshold;
+    _minPeakThreshold = minPeakThreshold;
+    _maxPeakThreshold = maxPeakThreshold;
     notifyListeners();
   }
 
@@ -133,9 +138,15 @@ class MagnetometerService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Set peak detection threshold
-  void setPeakThreshold(double threshold) {
-    _peakThreshold = threshold;
+  /// Set min peak threshold
+  void setMinPeakThreshold(double threshold) {
+    _minPeakThreshold = threshold;
+    notifyListeners();
+  }
+
+  /// Set max peak threshold
+  void setMaxPeakThreshold(double threshold) {
+    _maxPeakThreshold = threshold;
     notifyListeners();
   }
 
@@ -159,19 +170,17 @@ class MagnetometerService extends ChangeNotifier {
     notifyListeners();
 
     // Peak detection algorithm
-    // Look for significant increase in magnitude (magnet passing sensor)
-    final magnitudeChange = magnitude - _lastMagnitude;
-
-    if (magnitudeChange > _peakThreshold && !_inPeak) {
-      // Entering peak
-      _inPeak = true;
+    // A full rotation is counted when magnitude:
+    // 1. Goes ABOVE maxPeakThreshold (peak detected)
+    // 2. Then drops BELOW minPeakThreshold (ready for next peak)
+    if (_isReadyForNewPeak && magnitude > _maxPeakThreshold) {
+      // Peak detected - count rotation
       _onRotationDetected();
-    } else if (magnitudeChange < -_peakThreshold && _inPeak) {
-      // Exiting peak
-      _inPeak = false;
+      _isReadyForNewPeak = false;
+    } else if (!_isReadyForNewPeak && magnitude < _minPeakThreshold) {
+      // Magnitude dropped below minimum - ready for next peak
+      _isReadyForNewPeak = true;
     }
-
-    _lastMagnitude = magnitude;
   }
 
   /// Handle rotation detection
