@@ -32,6 +32,15 @@ class MagnetometerService extends ChangeNotifier {
   bool _isReadyForNewPeak = true;     // State tracker for peak detection
   int _rotationCount = 0;
 
+  // Performance optimization
+  int _samplesSinceUIUpdate = 0;
+  static const int _uiUpdateInterval = 5; // Update UI every 5 samples (~100ms)
+
+  // Peak detection buffer - track recent max to catch fast peaks
+  double _recentMaxMagnitude = 0.0;
+  int _samplesSinceMax = 0;
+  static const int _maxSampleWindow = 3; // Look back 3 samples (~60ms)
+
   // Statistics
   DateTime? _lastRotationTime;
   double _averageRotationInterval = 0.0;
@@ -62,9 +71,10 @@ class MagnetometerService extends ChangeNotifier {
     _rotationCount = 0;
     _lastRotationTime = null;
 
-    // Subscribe to magnetometer at ~50Hz
+    // Subscribe to magnetometer at ~100Hz for better fast rotation detection
+    // Note: Actual rate may be limited by hardware capabilities
     _magnetometerSubscription = magnetometerEventStream(
-      samplingPeriod: const Duration(milliseconds: 20),
+      samplingPeriod: const Duration(milliseconds: 10),
     ).listen(_onMagnetometerEvent);
 
     notifyListeners();
@@ -166,20 +176,40 @@ class MagnetometerService extends ChangeNotifier {
 
     _magneticStrength = magnitude;
 
-    // Notify listeners to update UI with live sensor values
-    notifyListeners();
+    // Track recent maximum to catch fast peaks
+    if (magnitude > _recentMaxMagnitude) {
+      _recentMaxMagnitude = magnitude;
+      _samplesSinceMax = 0;
+    } else {
+      _samplesSinceMax++;
+      // Reset recent max after window expires
+      if (_samplesSinceMax > _maxSampleWindow) {
+        _recentMaxMagnitude = magnitude;
+        _samplesSinceMax = 0;
+      }
+    }
 
-    // Peak detection algorithm
+    // Peak detection algorithm with buffered max
     // A full rotation is counted when magnitude:
-    // 1. Goes ABOVE maxPeakThreshold (peak detected)
+    // 1. Goes ABOVE maxPeakThreshold (use recent max for fast peaks)
     // 2. Then drops BELOW minPeakThreshold (ready for next peak)
-    if (_isReadyForNewPeak && magnitude > _maxPeakThreshold) {
+    if (_isReadyForNewPeak && _recentMaxMagnitude > _maxPeakThreshold) {
       // Peak detected - count rotation
       _onRotationDetected();
       _isReadyForNewPeak = false;
+      _recentMaxMagnitude = 0.0; // Reset buffer after detection
     } else if (!_isReadyForNewPeak && magnitude < _minPeakThreshold) {
       // Magnitude dropped below minimum - ready for next peak
       _isReadyForNewPeak = true;
+      _recentMaxMagnitude = magnitude;
+    }
+
+    // Throttle UI updates to avoid overwhelming the UI thread
+    // Only notify listeners every N samples instead of on every reading
+    _samplesSinceUIUpdate++;
+    if (_samplesSinceUIUpdate >= _uiUpdateInterval) {
+      _samplesSinceUIUpdate = 0;
+      notifyListeners();
     }
   }
 
