@@ -1,27 +1,29 @@
 import 'package:flutter/foundation.dart';
+import 'dart:math';
 
 /// Application settings model
 class Settings extends ChangeNotifier {
-  double _wheelCircumference;
+  double _wheelDiameter;
   double _minPeakThreshold;
   String _surveyName;
 
   Settings({
-    double wheelCircumference = 0.263, // Default ~84mm diameter wheel
+    double wheelDiameter = 0.043, // Default 43mm diameter wheel
     double minPeakThreshold = 50.0,
     String surveyName = 'Unnamed Survey',
-  })  : _wheelCircumference = wheelCircumference,
+  })  : _wheelDiameter = wheelDiameter,
         _minPeakThreshold = minPeakThreshold,
         _surveyName = surveyName;
 
   // Getters
-  double get wheelCircumference => _wheelCircumference;
+  double get wheelDiameter => _wheelDiameter;
+  double get wheelCircumference => _wheelDiameter * pi; // Calculated property
   double get minPeakThreshold => _minPeakThreshold;
   String get surveyName => _surveyName;
 
   // Update methods
-  void updateWheelCircumference(double value) {
-    _wheelCircumference = value;
+  void updateWheelDiameter(double value) {
+    _wheelDiameter = value;
     notifyListeners();
   }
 
@@ -38,15 +40,27 @@ class Settings extends ChangeNotifier {
   // Serialization
   Map<String, dynamic> toJson() {
     return {
-      'wheelCircumference': _wheelCircumference,
+      'wheelDiameter': _wheelDiameter,
       'minPeakThreshold': _minPeakThreshold,
       'surveyName': _surveyName,
     };
   }
 
   factory Settings.fromJson(Map<String, dynamic> json) {
+    // Support legacy 'wheelCircumference' for migration
+    double diameter;
+    if (json.containsKey('wheelDiameter')) {
+      diameter = json['wheelDiameter'] as double? ?? 0.0837;
+    } else if (json.containsKey('wheelCircumference')) {
+      // Migrate old circumference to diameter
+      final circumference = json['wheelCircumference'] as double? ?? 0.263;
+      diameter = circumference / pi;
+    } else {
+      diameter = 0.0837;
+    }
+
     return Settings(
-      wheelCircumference: json['wheelCircumference'] as double? ?? 0.263,
+      wheelDiameter: diameter,
       minPeakThreshold: json['minPeakThreshold'] as double? ?? 50.0,
       surveyName: json['surveyName'] as String? ?? 'Unnamed Survey',
     );

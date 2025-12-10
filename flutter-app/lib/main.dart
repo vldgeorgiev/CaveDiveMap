@@ -5,7 +5,9 @@ import 'services/storage_service.dart';
 import 'services/magnetometer_service.dart';
 import 'services/compass_service.dart';
 import 'services/export_service.dart';
+import 'services/button_customization_service.dart';
 import 'screens/main_screen.dart';
+import 'utils/theme_extensions.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,20 +22,28 @@ void main() async {
   // Load settings
   final settings = await storageService.loadSettings();
 
+  // Initialize and load button customization settings
+  final buttonCustomizationService =
+      ButtonCustomizationService(storageService);
+  await buttonCustomizationService.loadSettings();
+
   runApp(CaveDiveMapApp(
     storageService: storageService,
     initialSettings: settings,
+    buttonCustomizationService: buttonCustomizationService,
   ));
 }
 
 class CaveDiveMapApp extends StatelessWidget {
   final StorageService storageService;
   final Settings initialSettings;
+  final ButtonCustomizationService buttonCustomizationService;
 
   const CaveDiveMapApp({
     super.key,
     required this.storageService,
     required this.initialSettings,
+    required this.buttonCustomizationService,
   });
 
   @override
@@ -48,6 +58,11 @@ class CaveDiveMapApp extends StatelessWidget {
         // Settings
         ChangeNotifierProvider<Settings>(
           create: (_) => initialSettings,
+        ),
+
+        // Button customization service
+        ChangeNotifierProvider<ButtonCustomizationService>(
+          create: (_) => buttonCustomizationService,
         ),
 
         // Magnetometer service with settings dependency
@@ -77,15 +92,23 @@ class CaveDiveMapApp extends StatelessWidget {
           useMaterial3: true,
           brightness: Brightness.dark,
           colorScheme: ColorScheme.dark(
-            primary: Colors.cyan,
-            secondary: Colors.blue,
-            surface: Colors.grey[900]!,
-            error: Colors.red,
+            primary: AppColors.dataPrimary,
+            secondary: AppColors.actionMap,
+            surface: AppColors.backgroundCard,
+            error: AppColors.actionReset,
           ),
-          scaffoldBackgroundColor: Colors.black,
+          scaffoldBackgroundColor: AppColors.backgroundMain,
           appBarTheme: AppBarTheme(
-            backgroundColor: Colors.grey[900],
+            backgroundColor: AppColors.backgroundCard,
             elevation: 0,
+          ),
+          textTheme: TextTheme(
+            displayLarge: AppTextStyles.largeTitle,
+            displayMedium: AppTextStyles.title,
+            headlineMedium: AppTextStyles.headline,
+            bodyLarge: AppTextStyles.body,
+            bodyMedium: AppTextStyles.bodySemibold,
+            labelSmall: AppTextStyles.caption,
           ),
         ),
         home: const MainScreen(),

@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:async';
 import '../models/survey_data.dart';
 import '../services/storage_service.dart';
 import '../services/magnetometer_service.dart';
 import '../services/compass_service.dart';
+import '../services/button_customization_service.dart';
+import '../widgets/positioned_button.dart';
+import '../widgets/info_card.dart';
+import '../widgets/monospaced_text.dart';
+import '../utils/theme_extensions.dart';
 
 /// Screen for entering manual survey point data
 class SaveDataScreen extends StatefulWidget {
-  const SaveDataScreen({super.key});
+  final double capturedHeading;
+
+  const SaveDataScreen({super.key, required this.capturedHeading});
 
   @override
   State<SaveDataScreen> createState() => _SaveDataScreenState();
@@ -25,43 +33,187 @@ class _SaveDataScreenState extends State<SaveDataScreen> {
   double _up = 0.0;
   double _down = 0.0;
 
+  // Tap vs long-press detection
+  Timer? _incrementTimer;
+  Timer? _decrementTimer;
+  Timer? _incrementLongPressDetector;
+  Timer? _decrementLongPressDetector;
+  bool _isIncrementHolding = false;
+  bool _isDecrementHolding = false;
+
+  @override
+  void dispose() {
+    _incrementTimer?.cancel();
+    _decrementTimer?.cancel();
+    _incrementLongPressDetector?.cancel();
+    _decrementLongPressDetector?.cancel();
+    super.dispose();
+  }
+
   void _cycleParameter() {
     setState(() {
       _currentParameter = (_currentParameter + 1) % _parameters.length;
     });
   }
 
-  void _adjustCurrentParameter(double delta) {
+  void _increment(double step) {
     setState(() {
       switch (_currentParameter) {
         case 0: // Depth
-          _depth = (_depth + delta).clamp(0.0, 200.0);
+          _depth = _depth + step;
           break;
         case 1: // Left
-          _left = (_left + delta).clamp(0.0, 100.0);
+          _left = _left + step;
           break;
         case 2: // Right
-          _right = (_right + delta).clamp(0.0, 100.0);
+          _right = _right + step;
           break;
         case 3: // Up
-          _up = (_up + delta).clamp(0.0, 100.0);
+          _up = _up + step;
           break;
         case 4: // Down
-          _down = (_down + delta).clamp(0.0, 100.0);
+          _down = _down + step;
           break;
       }
     });
   }
 
+  void _decrement(double step) {
+    setState(() {
+      switch (_currentParameter) {
+        case 0: // Depth
+          _depth = (_depth - step).clamp(0.0, double.infinity);
+          break;
+        case 1: // Left
+          _left = (_left - step).clamp(0.0, double.infinity);
+          break;
+        case 2: // Right
+          _right = (_right - step).clamp(0.0, double.infinity);
+          break;
+        case 3: // Up
+          _up = (_up - step).clamp(0.0, double.infinity);
+          break;
+        case 4: // Down
+          _down = (_down - step).clamp(0.0, double.infinity);
+          break;
+      }
+    });
+  }
+
+  double get _currentParameterValue {
+    switch (_currentParameter) {
+      case 0:
+        return _depth;
+      case 1:
+        return _left;
+      case 2:
+        return _right;
+      case 3:
+        return _up;
+      case 4:
+        return _down;
+      default:
+        return 0.0;
+    }
+  }
+
+  // Start repeating increment for long-press
+  void _startIncrementTimer() {
+    _incrementTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
+      _increment(1.0);
+    });
+  }
+
+  // Start repeating decrement for long-press
+  void _startDecrementTimer() {
+    _decrementTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
+      _decrement(1.0);
+    });
+  }
+
+  // Stop increment timer
+  void _stopIncrementTimer() {
+    _incrementTimer?.cancel();
+    _incrementTimer = null;
+  }
+
+  // Stop decrement timer
+  void _stopDecrementTimer() {
+    _decrementTimer?.cancel();
+    _decrementTimer = null;
+  }
+
+  // Handle increment tap down (start of press)
+  void _onIncrementTapDown() {
+    _isIncrementHolding = false;
+    // Schedule long-press detection after 500ms
+    _incrementLongPressDetector = Timer(const Duration(milliseconds: 500), () {
+      if (mounted && !_isIncrementHolding) {
+        _isIncrementHolding = true;
+        _startIncrementTimer();
+      }
+    });
+  }
+
+  // Handle increment tap up (end of press)
+  void _onIncrementTapUp() {
+    _incrementLongPressDetector?.cancel();
+    _incrementLongPressDetector = null;
+
+    if (!_isIncrementHolding) {
+      // Was a tap, not a hold
+      _increment(1.0);
+    }
+    _stopIncrementTimer();
+    _isIncrementHolding = false;
+  }
+
+  // Handle decrement tap down
+  void _onDecrementTapDown() {
+    _isDecrementHolding = false;
+    _decrementLongPressDetector = Timer(const Duration(milliseconds: 500), () {
+      if (mounted && !_isDecrementHolding) {
+        _isDecrementHolding = true;
+        _startDecrementTimer();
+      }
+    });
+  }
+
+  // Handle decrement tap up
+  void _onDecrementTapUp() {
+    _decrementLongPressDetector?.cancel();
+    _decrementLongPressDetector = null;
+
+    if (!_isDecrementHolding) {
+      _decrement(1.0);
+    }
+    _stopDecrementTimer();
+    _isDecrementHolding = false;
+  }
+
+  // Handle tap cancel (finger moved off button)
+  void _onIncrementTapCancel() {
+    _incrementLongPressDetector?.cancel();
+    _incrementLongPressDetector = null;
+    _stopIncrementTimer();
+    _isIncrementHolding = false;
+  }
+
+  void _onDecrementTapCancel() {
+    _decrementLongPressDetector?.cancel();
+    _decrementLongPressDetector = null;
+    _stopDecrementTimer();
+    _isDecrementHolding = false;
+  }
+
   Future<void> _saveManualPoint() async {
     final magnetometerService = context.read<MagnetometerService>();
-    final compassService = context.read<CompassService>();
     final storageService = context.read<StorageService>();
 
     final manualPoint = SurveyData(
       recordNumber: magnetometerService.currentPointNumber + 1,
       distance: magnetometerService.totalDistance,
-      heading: compassService.heading,
+      heading: widget.capturedHeading,  // Use static captured heading
       depth: _depth,  // Use manually entered depth
       left: _left,
       right: _right,
@@ -80,7 +232,7 @@ class _SaveDataScreenState extends State<SaveDataScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Manual point ${manualPoint.recordNumber} saved'),
-          backgroundColor: Colors.green,
+          backgroundColor: AppColors.actionSave,
         ),
       );
       Navigator.pop(context);
@@ -90,287 +242,144 @@ class _SaveDataScreenState extends State<SaveDataScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppColors.backgroundPrimary,
       appBar: AppBar(
-        title: const Text('Save Manual Point'),
-        backgroundColor: Colors.grey[900],
+        title: Text(
+          'Save Manual Point',
+          style: AppTextStyles.body.copyWith(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        backgroundColor: AppColors.backgroundPrimary,
+        elevation: 0,
       ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: Consumer2<MagnetometerService, CompassService>(
-                builder: (context, magnetometer, compass, child) {
-                  return SingleChildScrollView(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16.0),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                      // Current sensor readings (read-only)
-                      _buildReadOnlyRow('Point', '${magnetometer.currentPointNumber + 1}'),
-                      const SizedBox(height: 12),
-                      _buildReadOnlyRow('Distance', '${magnetometer.totalDistance.toStringAsFixed(2)} m'),
-                      const SizedBox(height: 12),
-                      _buildReadOnlyRow('Heading', '${compass.heading.toStringAsFixed(1)}°'),
-                      const SizedBox(height: 12),
-                      _buildReadOnlyRow('Depth', '${magnetometer.currentDepth.toStringAsFixed(1)} m'),
-
-                      const SizedBox(height: 40),
-                      const Divider(color: Colors.grey),
-                      const SizedBox(height: 20),
-
-                      // Passage dimensions header
-                      Text(
-                        'Passage Dimensions',
-                        style: TextStyle(
-                          color: Colors.grey[400],
-                          fontSize: 20,
-                          fontWeight: FontWeight.w300,
-                        ),
-                      ),
-                      const SizedBox(height: 30),
-
-                      // Active parameter selector
-                      GestureDetector(
-                        onTap: _cycleParameter,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.blue[700],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            'Editing: ${_parameters[_currentParameter]}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
+      body: Consumer2<MagnetometerService, ButtonCustomizationService>(
+        builder: (context, magnetometer, buttonService, child) {
+          return Stack(
+            children: [
+              // Main content
+              SafeArea(
+                child: Padding(
+                  padding: AppSpacing.screenPadding,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header info card
+                      InfoCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildInfoRow(
+                              'Point Number',
+                              '${magnetometer.currentPointNumber + 1}',
                             ),
-                          ),
+                            const SizedBox(height: 8),
+                            _buildInfoRow(
+                              'Distance',
+                              '${magnetometer.totalDistance.toStringAsFixed(2)} m',
+                            ),
+                            const SizedBox(height: 8),
+                            _buildInfoRow(
+                              'Heading',
+                              '${widget.capturedHeading.toStringAsFixed(1)}°',
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 30),
+                      const SizedBox(height: AppSpacing.medium),
 
-                      // Current parameter adjustment
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          _buildAdjustButton('-', () => _adjustCurrentParameter(-1.0)),
-                          const SizedBox(width: 30),
-                          _buildParameterValue(_getCurrentParameterValue()),
-                          const SizedBox(width: 30),
-                          _buildAdjustButton('+', () => _adjustCurrentParameter(1.0)),
-                        ],
+                      Divider(color: AppColors.textSecondary),
+                      const SizedBox(height: AppSpacing.medium),
+
+                      // Selected parameter card
+                      InfoCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text(
+                              _parameters[_currentParameter],
+                              style: AppTextStyles.title.copyWith(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            MonospacedText(
+                              '${_currentParameterValue.toStringAsFixed(2)} m',
+                              style: AppTextStyles.largeTitle.copyWith(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
 
-                      const SizedBox(height: 40),
-
-                      // All dimensions display
-                      _buildDimensionsGrid(),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-
-            // Bottom action buttons
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                children: [
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _saveManualPoint,
-                      icon: const Icon(Icons.save),
-                      label: const Text('Save Manual Point'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                    ),
+                      // Spacer to push buttons to bottom
+                      const Spacer(),
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: const BorderSide(color: Colors.grey),
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                      child: const Text('Cancel'),
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
-  Widget _buildReadOnlyRow(String label, String value) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text(
-          '$label: ',
-          style: TextStyle(
-            color: Colors.grey[400],
-            fontSize: 18,
-          ),
-        ),
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            fontFeatures: [FontFeature.tabularFigures()],
-          ),
-        ),
-      ],
-    );
-  }
+              // Circular action buttons positioned via ButtonConfig
+              PositionedButton(
+                config: buttonService.saveDataDecrementButton,
+                onTapDown: (_) => _onDecrementTapDown(),
+                onTapUp: (_) => _onDecrementTapUp(),
+                onTapCancel: _onDecrementTapCancel,
+                icon: Icons.remove,
+                color: AppColors.actionDecrement,
+              ),
 
-  Widget _buildAdjustButton(String label, VoidCallback onPressed) {
-    return SizedBox(
-      width: 70,
-      height: 70,
-      child: ElevatedButton(
-        onPressed: onPressed,
-        onLongPress: () {
-          // TODO: Implement rapid increment/decrement on long press
+              PositionedButton(
+                config: buttonService.saveDataSaveButton,
+                onPressed: _saveManualPoint,
+                label: 'Save',
+                color: AppColors.actionSave,
+              ),
+
+              PositionedButton(
+                config: buttonService.saveDataIncrementButton,
+                onTapDown: (_) => _onIncrementTapDown(),
+                onTapUp: (_) => _onIncrementTapUp(),
+                onTapCancel: _onIncrementTapCancel,
+                icon: Icons.add,
+                color: AppColors.actionIncrement,
+              ),
+
+              PositionedButton(
+                config: buttonService.saveDataCycleButton,
+                onPressed: _cycleParameter,
+                icon: Icons.refresh,
+                color: AppColors.actionCycle,
+              ),
+            ],
+          );
         },
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.grey[800],
-          foregroundColor: Colors.white,
-          padding: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
-        ),
       ),
     );
   }
 
-  Widget _buildParameterValue(double value) {
-    return Column(
+  Widget _buildInfoRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
-          _parameters[_currentParameter],
-          style: TextStyle(
-            color: Colors.grey[400],
-            fontSize: 16,
+          label,
+          style: AppTextStyles.body.copyWith(
+            color: AppColors.textSecondary,
           ),
         ),
-        const SizedBox(height: 4),
-        Text(
-          '${value.toStringAsFixed(1)} m',
-          style: const TextStyle(
-            color: Colors.cyan,
-            fontSize: 48,
-            fontWeight: FontWeight.bold,
-            fontFeatures: [FontFeature.tabularFigures()],
+        MonospacedText(
+          value,
+          style: AppTextStyles.title.copyWith(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ],
     );
-  }
-
-  Widget _buildDimensionsGrid() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      decoration: BoxDecoration(
-        color: Colors.grey[900],
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildDimensionItem('Depth', _depth, 0),
-              _buildDimensionItem('Left', _left, 1),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildDimensionItem('Right', _right, 2),
-              _buildDimensionItem('Up', _up, 3),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _buildDimensionItem('Down', _down, 4),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDimensionItem(String label, double value, int index) {
-    final isActive = _currentParameter == index;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: isActive ? Colors.blue[900] : Colors.transparent,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Column(
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: isActive ? Colors.blue[300] : Colors.grey[500],
-              fontSize: 14,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '${value.toStringAsFixed(1)} m',
-            style: TextStyle(
-              color: isActive ? Colors.cyan : Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  double _getCurrentParameterValue() {
-    switch (_currentParameter) {
-      case 0:
-        return _depth;
-      case 1:
-        return _left;
-      case 2:
-        return _right;
-      case 3:
-        return _up;
-      case 4:
-        return _down;
-      default:
-        return 0.0;
-    }
   }
 }

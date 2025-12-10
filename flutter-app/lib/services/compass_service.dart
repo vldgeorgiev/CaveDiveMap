@@ -15,6 +15,7 @@ class CompassService extends ChangeNotifier {
   double? get currentHeading => _currentHeading;
   double get heading => _currentHeading ?? 0.0; // Non-nullable for convenience
   double? get headingAccuracy => _headingAccuracy;
+  double get accuracy => _headingAccuracy ?? 999.0; // Non-nullable, high value if unknown
   bool get isActive => _isActive;
   bool get isCalibrated => _isCalibrated;
 

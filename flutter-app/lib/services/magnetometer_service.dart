@@ -112,7 +112,7 @@ class MagnetometerService extends ChangeNotifier {
 
   /// Update settings from Settings model
   void updateSettings({required double wheelCircumference, required double minPeakThreshold}) {
-    _wheelCircumference = wheelCircumference;
+    _wheelCircumference = wheelCircumference; // Circumference passed in (pre-calculated)
     _peakThreshold = minPeakThreshold;
     notifyListeners();
   }

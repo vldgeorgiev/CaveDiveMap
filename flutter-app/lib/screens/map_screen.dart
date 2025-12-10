@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../models/survey_data.dart';
 import '../services/storage_service.dart';
 import '../services/compass_service.dart';
+import '../services/export_service.dart';
+import '../utils/theme_extensions.dart';
 import 'dart:math' as math;
 
 /// Map visualization screen with 2D cave survey rendering
@@ -18,6 +20,7 @@ class _MapScreenState extends State<MapScreen> {
   Offset _offset = Offset.zero;
   Offset _lastFocalPoint = Offset.zero;
   double _rotation = 0.0; // North-oriented rotation
+  double _baseRotation = 0.0; // Base rotation before gesture
 
   @override
   Widget build(BuildContext context) {
@@ -74,6 +77,7 @@ class _MapScreenState extends State<MapScreen> {
               GestureDetector(
                 onScaleStart: (details) {
                   _lastFocalPoint = details.focalPoint;
+                  _baseRotation = _rotation;
                 },
                 onScaleUpdate: (details) {
                   setState(() {
@@ -83,6 +87,9 @@ class _MapScreenState extends State<MapScreen> {
 
                     // Handle scaling (pinch zoom)
                     _scale = (_scale * details.scale).clamp(5.0, 100.0);
+
+                    // Handle rotation (two-finger twist)
+                    _rotation = _baseRotation + (details.rotation * 180 / math.pi);
                   });
                 },
                 child: CustomPaint(
@@ -120,6 +127,13 @@ class _MapScreenState extends State<MapScreen> {
                 left: 16,
                 child: _buildStatsOverlay(surveyData),
               ),
+
+              // Export buttons
+              Positioned(
+                bottom: 20,
+                left: 20,
+                child: _buildExportButtons(),
+              ),
             ],
           );
         },
@@ -129,40 +143,61 @@ class _MapScreenState extends State<MapScreen> {
 
   Widget _buildCompassOverlay(double heading) {
     return Container(
-      width: 80,
-      height: 80,
+      width: 90,
+      height: 90,
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.7),
+        color: AppColors.backgroundPrimary.withOpacity(0.85),
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.cyan, width: 2),
+        border: Border.all(color: AppColors.dataPrimary, width: 2.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.5),
+            blurRadius: 8,
+            spreadRadius: 2,
+          ),
+        ],
       ),
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // North indicator
+          // Compass rose background
+          CustomPaint(
+            size: const Size(80, 80),
+            painter: CompassRosePainter(),
+          ),
+          // North indicator (red arrow)
           Transform.rotate(
-            angle: -heading * math.pi / 180,
-            child: const Icon(
+            angle: -(heading + _rotation) * math.pi / 180,
+            child: Icon(
               Icons.navigation,
-              color: Colors.red,
-              size: 40,
+              color: AppColors.actionReset,
+              size: 44,
+              shadows: const [
+                Shadow(
+                  color: Colors.black,
+                  blurRadius: 4,
+                ),
+              ],
             ),
           ),
           // North label
-          Positioned(
-            top: 8,
-            child: Text(
-              'N',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                shadows: [
-                  Shadow(
-                    color: Colors.black.withOpacity(0.8),
-                    blurRadius: 4,
-                  ),
-                ],
+          Transform.rotate(
+            angle: -_rotation * math.pi / 180,
+            child: Positioned(
+              top: 10,
+              child: Text(
+                'N',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  shadows: [
+                    Shadow(
+                      color: Colors.black.withOpacity(0.9),
+                      blurRadius: 6,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -201,6 +236,167 @@ class _MapScreenState extends State<MapScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildExportButtons() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // CSV Export (Purple)
+        GestureDetector(
+          onTap: () => _exportCSV(),
+          child: Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: AppColors.actionExportCSV,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.4),
+                  blurRadius: 8,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.upload_file,
+              color: Colors.white,
+              size: 28,
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        // Therion Export (Gray)
+        GestureDetector(
+          onTap: () => _exportTherion(),
+          child: Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: AppColors.actionExportTherion,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.4),
+                  blurRadius: 8,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.description,
+              color: Colors.white,
+              size: 28,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _exportCSV() async {
+    try {
+      final storageService = context.read<StorageService>();
+      final exportService = context.read<ExportService>();
+      final surveyData = await storageService.getAllSurveyData();
+
+      if (surveyData.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'No survey data to export',
+                style: AppTextStyles.body.copyWith(color: Colors.white),
+              ),
+              backgroundColor: AppColors.actionWarning,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+
+      final fileName = 'cave_survey_${DateTime.now().millisecondsSinceEpoch ~/ 1000}';
+      await exportService.exportAndShareCSV(surveyData, fileName);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'CSV exported successfully',
+              style: AppTextStyles.body.copyWith(color: Colors.white),
+            ),
+            backgroundColor: AppColors.actionExportCSV,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Export failed: $e',
+              style: AppTextStyles.body.copyWith(color: Colors.white),
+            ),
+            backgroundColor: AppColors.actionReset,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportTherion() async {
+    try {
+      final storageService = context.read<StorageService>();
+      final exportService = context.read<ExportService>();
+      final surveyData = await storageService.getAllSurveyData();
+
+      if (surveyData.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'No survey data to export',
+                style: AppTextStyles.body.copyWith(color: Colors.white),
+              ),
+              backgroundColor: AppColors.actionWarning,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+
+      final surveyName = 'cave_survey_${DateTime.now().millisecondsSinceEpoch ~/ 1000}';
+      await exportService.exportAndShareTherion(surveyData, surveyName);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Therion file exported successfully',
+              style: AppTextStyles.body.copyWith(color: Colors.white),
+            ),
+            backgroundColor: AppColors.actionExportTherion,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Export failed: $e',
+              style: AppTextStyles.body.copyWith(color: Colors.white),
+            ),
+            backgroundColor: AppColors.actionReset,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildStatsOverlay(List<SurveyData> surveyData) {
@@ -435,4 +631,39 @@ class CaveMapPainter extends CustomPainter {
            oldDelegate.offset != offset ||
            oldDelegate.rotation != rotation;
   }
+}
+
+/// Custom painter for compass rose background
+class CompassRosePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+
+    // Draw cardinal direction marks
+    final markPaint = Paint()
+      ..color = AppColors.textSecondary
+      ..strokeWidth = 1.5;
+
+    for (int i = 0; i < 8; i++) {
+      final angle = (i * math.pi / 4) - (math.pi / 2);
+      final isCardinal = i % 2 == 0;
+      final startRadius = radius * (isCardinal ? 0.65 : 0.75);
+      final endRadius = radius * 0.85;
+
+      final start = Offset(
+        center.dx + math.cos(angle) * startRadius,
+        center.dy + math.sin(angle) * startRadius,
+      );
+      final end = Offset(
+        center.dx + math.cos(angle) * endRadius,
+        center.dy + math.sin(angle) * endRadius,
+      );
+
+      canvas.drawLine(start, end, markPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(CompassRosePainter oldDelegate) => false;
 }

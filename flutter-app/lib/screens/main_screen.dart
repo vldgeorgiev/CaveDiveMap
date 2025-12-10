@@ -1,8 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:async';
 import '../services/magnetometer_service.dart';
 import '../services/compass_service.dart';
 import '../services/storage_service.dart';
+import '../services/button_customization_service.dart';
+import '../widgets/positioned_button.dart';
+import '../widgets/monospaced_text.dart';
+import '../widgets/heading_accuracy_indicator.dart';
+import '../widgets/calibration_toast.dart';
+import '../utils/theme_extensions.dart';
 import 'save_data_screen.dart';
 import 'settings_screen.dart';
 import 'map_screen.dart';
@@ -16,6 +23,10 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
+  bool _showCalibrationToast = false;
+  Timer? _resetHoldTimer;
+  bool _isResetting = false;
+
   @override
   void initState() {
     super.initState();
@@ -31,13 +42,32 @@ class _MainScreenState extends State<MainScreen> {
     // Stop sensors when leaving screen
     context.read<MagnetometerService>().stopListening();
     context.read<CompassService>().stopListening();
+    _resetHoldTimer?.cancel();
     super.dispose();
   }
 
   void _navigateToSaveData() {
+    final compass = context.read<CompassService>();
+
+    // Check heading accuracy before allowing save
+    if (compass.accuracy > 15) {
+      setState(() => _showCalibrationToast = true);
+      Future.delayed(const Duration(seconds: 1), () {
+        if (mounted) {
+          setState(() => _showCalibrationToast = false);
+        }
+      });
+      return;
+    }
+
+    // Capture current heading to pass as static value
+    final capturedHeading = compass.heading;
+
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => const SaveDataScreen()),
+      MaterialPageRoute(
+        builder: (context) => SaveDataScreen(capturedHeading: capturedHeading),
+      ),
     );
   }
 
@@ -48,19 +78,59 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  void _navigateToSettings() {
-    Navigator.push(
+  Future<void> _navigateToSettings() async {
+    // Stop sensors before navigating to settings
+    context.read<MagnetometerService>().stopListening();
+    context.read<CompassService>().stopListening();
+
+    await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const SettingsScreen()),
     );
+
+    // Restart sensors after returning from settings
+    if (mounted) {
+      context.read<MagnetometerService>().startListening();
+      context.read<CompassService>().startListening();
+    }
   }
 
-  Future<void> _resetSurvey() async {
+  void _onResetTapDown() {
+    _resetHoldTimer = Timer(const Duration(seconds: 3), () {
+      _confirmReset();
+    });
+  }
+
+  void _onResetTapUp() {
+    _resetHoldTimer?.cancel();
+    _resetHoldTimer = null;
+
+    if (!_isResetting) {
+      // Show hint about long-press
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Hold for 3 seconds to reset'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+    }
+  }
+
+  void _onResetTapCancel() {
+    _resetHoldTimer?.cancel();
+    _resetHoldTimer = null;
+  }
+
+  Future<void> _confirmReset() async {
+    _isResetting = true;
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Reset Survey'),
-        content: const Text('Are you sure you want to reset all survey data? This cannot be undone.'),
+        content: const Text(
+          'Are you sure you want to reset all survey data? This cannot be undone.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -82,163 +152,157 @@ class _MainScreenState extends State<MainScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Survey data reset')),
+          const SnackBar(
+            content: Text('Data reset successfully'),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     }
+
+    _isResetting = false;
+  }
+
+  void _showCameraNotImplemented() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Camera feature not yet implemented'),
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppColors.backgroundPrimary,
       appBar: AppBar(
-        title: const Text('CaveDiveMap'),
-        backgroundColor: Colors.grey[900],
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: _navigateToSettings,
+        title: Text(
+          'Cave Dive Map',
+          style: AppTextStyles.body.copyWith(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.bold,
           ),
-        ],
+        ),
+        backgroundColor: AppColors.backgroundPrimary,
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.settings, color: AppColors.textPrimary),
+          onPressed: _navigateToSettings,
+          tooltip: 'Settings',
+        ),
       ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Sensor data display
-            Expanded(
-              child: Consumer2<MagnetometerService, CompassService>(
-                builder: (context, magnetometer, compass, child) {
-                  return SingleChildScrollView(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16.0),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                      // Point number
-                      _buildDataRow(
-                        'Point',
-                        '${magnetometer.currentPointNumber}',
-                        fontSize: 36,
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Distance
-                      _buildDataRow(
-                        'Distance',
-                        '${magnetometer.totalDistance.toStringAsFixed(2)} m',
-                        fontSize: 48,
-                        color: Colors.cyan,
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Heading
-                      _buildDataRow(
+      body: Consumer3<MagnetometerService, CompassService, ButtonCustomizationService>(
+        builder: (context, magnetometer, compass, buttonService, child) {
+          return Stack(
+            children: [
+              // Main sensor data display
+              SafeArea(
+                child: Padding(
+                  padding: AppSpacing.screenPadding,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Heading with large typography
+                      _buildLargeDataRow(
                         'Heading',
                         '${compass.heading.toStringAsFixed(1)}°',
-                        fontSize: 36,
-                        color: Colors.orange,
+                        AppTextStyles.largeTitle,
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 4),
 
-                      // Depth (read-only display)
-                      _buildDataRow(
-                        'Depth',
-                        '${magnetometer.currentDepth.toStringAsFixed(1)} m',
-                        fontSize: 36,
-                        color: Colors.lightBlue,
+                      // Heading accuracy indicator
+                      HeadingAccuracyIndicator(accuracy: compass.accuracy),
+                      const SizedBox(height: AppSpacing.small),
+
+                      // Distance with large typography
+                      _buildLargeDataRow(
+                        'Distance',
+                        '${magnetometer.totalDistance.toStringAsFixed(2)} m',
+                        AppTextStyles.largeTitle,
                       ),
-                      const SizedBox(height: 30),
+                      const SizedBox(height: AppSpacing.small),
 
-                      // Magnetic field strength indicator
+                      // Point number (smaller text)
+                      _buildLargeDataRow(
+                        'Points',
+                        magnetometer.currentPointNumber.toString(),
+                        AppTextStyles.body,
+                      ),
+                      const SizedBox(height: AppSpacing.small),
+
+                      // Magnetic strength indicator
                       _buildMagneticStrengthIndicator(magnetometer.magneticStrength),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
 
-            // Bottom control buttons
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _navigateToSaveData,
-                          icon: const Icon(Icons.save),
-                          label: const Text('Save Manual Point'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _navigateToMap,
-                          icon: const Icon(Icons.map),
-                          label: const Text('View Map'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                          ),
-                        ),
-                      ),
+                      // Spacer to push buttons to bottom
+                      const Spacer(),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _resetSurvey,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Reset Survey'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red[700],
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ],
-        ),
+
+              // Circular action buttons positioned via ButtonConfig
+              PositionedButton(
+                config: buttonService.mainSaveButton,
+                onPressed: _navigateToSaveData,
+                icon: Icons.save,
+                label: 'Save',
+                color: AppColors.actionSave,
+              ),
+
+              PositionedButton(
+                config: buttonService.mainMapButton,
+                onPressed: _navigateToMap,
+                icon: Icons.map,
+                label: 'Map',
+                color: AppColors.actionMap,
+              ),
+
+              PositionedButton(
+                config: buttonService.mainResetButton,
+                onTapDown: (_) => _onResetTapDown(),
+                onTapUp: (_) => _onResetTapUp(),
+                onTapCancel: _onResetTapCancel,
+                icon: Icons.refresh,
+                label: 'Reset',
+                color: AppColors.actionReset,
+              ),
+
+              PositionedButton(
+                config: buttonService.mainCameraButton,
+                onPressed: _showCameraNotImplemented,
+                icon: Icons.camera_alt,
+                label: 'Photo',
+                color: AppColors.actionSecondary,
+              ),
+
+              // Calibration toast overlay
+              if (_showCalibrationToast)
+                CalibrationToast(
+                  message: 'Move device in figure-8 to calibrate compass',
+                ),
+            ],
+          );
+        },
       ),
     );
   }
 
-  Widget _buildDataRow(String label, String value, {
-    double fontSize = 32,
-    Color color = Colors.white,
-  }) {
+  Widget _buildLargeDataRow(String label, String value, TextStyle valueStyle) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: TextStyle(
-            color: Colors.grey[400],
-            fontSize: 18,
-            fontWeight: FontWeight.w300,
+          style: AppTextStyles.body.copyWith(
+            color: AppColors.textSecondary,
           ),
         ),
         const SizedBox(height: 4),
-        Text(
+        MonospacedText(
           value,
-          style: TextStyle(
-            color: color,
-            fontSize: fontSize,
-            fontWeight: FontWeight.bold,
-            fontFeatures: const [FontFeature.tabularFigures()],
+          style: valueStyle.copyWith(
+            color: AppColors.textPrimary,
           ),
         ),
       ],
@@ -249,13 +313,22 @@ class _MainScreenState extends State<MainScreen> {
     // Normalize strength to 0-100 range for display
     final normalizedStrength = (strength / 100.0).clamp(0.0, 1.0);
 
+    Color strengthColor;
+    if (normalizedStrength > 0.7) {
+      strengthColor = AppColors.statusGood;
+    } else if (normalizedStrength > 0.4) {
+      strengthColor = AppColors.statusWarning;
+    } else {
+      strengthColor = AppColors.statusBad;
+    }
+
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           'Magnetic Field',
-          style: TextStyle(
-            color: Colors.grey[400],
-            fontSize: 14,
+          style: AppTextStyles.caption.copyWith(
+            color: AppColors.textSecondary,
           ),
         ),
         const SizedBox(height: 8),
@@ -263,20 +336,16 @@ class _MainScreenState extends State<MainScreen> {
           width: 200,
           child: LinearProgressIndicator(
             value: normalizedStrength,
-            backgroundColor: Colors.grey[800],
-            valueColor: AlwaysStoppedAnimation<Color>(
-              normalizedStrength > 0.7 ? Colors.green :
-              normalizedStrength > 0.4 ? Colors.orange : Colors.red,
-            ),
+            backgroundColor: AppColors.backgroundSecondary,
+            valueColor: AlwaysStoppedAnimation<Color>(strengthColor),
             minHeight: 8,
           ),
         ),
         const SizedBox(height: 4),
         Text(
           '${strength.toStringAsFixed(1)} μT',
-          style: const TextStyle(
-            color: Colors.grey,
-            fontSize: 12,
+          style: AppTextStyles.caption.copyWith(
+            color: AppColors.textSecondary,
           ),
         ),
       ],

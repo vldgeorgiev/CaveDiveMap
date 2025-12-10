@@ -2,14 +2,17 @@ import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/survey_data.dart';
 import '../models/settings.dart';
+import '../models/button_config.dart';
 
 /// Storage service for survey data and app settings using Hive
 class StorageService extends ChangeNotifier {
   static const String _surveyBoxName = 'survey_data';
   static const String _settingsBoxName = 'app_settings';
+  static const String _buttonSettingsBoxName = 'button_settings';
 
   Box<Map>? _surveyBox;
   Box? _settingsBox;
+  Box? _buttonSettingsBox;
 
   List<SurveyData> _surveyPoints = [];
   int _pointCounter = 1;
@@ -24,8 +27,14 @@ class StorageService extends ChangeNotifier {
   Future<void> initialize() async {
     await Hive.initFlutter();
 
+    // Register adapters
+    if (!Hive.isAdapterRegistered(2)) {
+      Hive.registerAdapter(ButtonConfigAdapter());
+    }
+
     _surveyBox = await Hive.openBox<Map>(_surveyBoxName);
     _settingsBox = await Hive.openBox(_settingsBoxName);
+    _buttonSettingsBox = await Hive.openBox(_buttonSettingsBoxName);
 
     // Load existing data
     await _loadSurveyData();
@@ -178,5 +187,20 @@ class StorageService extends ChangeNotifier {
   Future<void> close() async {
     await _surveyBox?.close();
     await _settingsBox?.close();
+    await _buttonSettingsBox?.close();
+  }
+
+  // ========== Button Configuration Storage ==========
+
+  /// Save button configuration
+  Future<void> saveButtonConfig(String key, ButtonConfig config) async {
+    if (_buttonSettingsBox == null) return;
+    await _buttonSettingsBox!.put(key, config);
+  }
+
+  /// Load button configuration
+  Future<ButtonConfig?> loadButtonConfig(String key) async {
+    if (_buttonSettingsBox == null) return null;
+    return _buttonSettingsBox!.get(key) as ButtonConfig?;
   }
 }

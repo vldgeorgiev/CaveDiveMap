@@ -4,6 +4,12 @@ import '../models/settings.dart';
 import '../services/storage_service.dart';
 import '../services/export_service.dart';
 import '../services/magnetometer_service.dart';
+import '../services/compass_service.dart';
+import '../utils/theme_extensions.dart';
+import '../widgets/info_card.dart';
+import '../widgets/monospaced_text.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'button_customization_screen.dart';
 
 /// Settings screen for app configuration
 class SettingsScreen extends StatefulWidget {
@@ -14,7 +20,7 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  late TextEditingController _wheelCircumferenceController;
+  late TextEditingController _wheelDiameterController;
   late TextEditingController _minPeakThresholdController;
   late TextEditingController _maxPeakThresholdController;
   late TextEditingController _surveyNameController;
@@ -23,8 +29,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     final settings = context.read<Settings>();
-    _wheelCircumferenceController = TextEditingController(
-      text: settings.wheelCircumference.toStringAsFixed(3),
+    _wheelDiameterController = TextEditingController(
+      text: (settings.wheelDiameter * 1000).toStringAsFixed(1), // Convert m to mm for display
     );
     _minPeakThresholdController = TextEditingController(
       text: settings.minPeakThreshold.toStringAsFixed(1),
@@ -36,30 +42,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
       text: settings.surveyName,
     );
 
-    // Start magnetometer service for live sensor readout
+    // Start magnetometer and compass services for live sensor readout
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<MagnetometerService>().startListening();
+      context.read<CompassService>().startListening();
     });
   }
 
   @override
   void dispose() {
-    _wheelCircumferenceController.dispose();
+    _wheelDiameterController.dispose();
     _minPeakThresholdController.dispose();
     _maxPeakThresholdController.dispose();
     _surveyNameController.dispose();
-    // Note: Don't stop magnetometer here as main screen might still need it
+    // Stop sensors when leaving settings
+    context.read<MagnetometerService>().stopListening();
+    context.read<CompassService>().stopListening();
     super.dispose();
   }
 
   Future<void> _saveSettings() async {
     final settings = context.read<Settings>();
 
-    final wheelCircumference = double.tryParse(_wheelCircumferenceController.text);
+    final wheelDiameterMm = double.tryParse(_wheelDiameterController.text);
     final minPeakThreshold = double.tryParse(_minPeakThresholdController.text);
 
-    if (wheelCircumference == null || wheelCircumference <= 0) {
-      _showError('Wheel circumference must be a positive number');
+    if (wheelDiameterMm == null || wheelDiameterMm <= 0) {
+      _showError('Wheel diameter must be a positive number');
       return;
     }
 
@@ -68,7 +77,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
-    settings.updateWheelCircumference(wheelCircumference);
+    // Convert mm to meters for storage
+    settings.updateWheelDiameter(wheelDiameterMm / 1000);
     settings.updateMinPeakThreshold(minPeakThreshold);
     settings.updateSurveyName(_surveyNameController.text);
 
@@ -156,108 +166,154 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppColors.backgroundPrimary,
       appBar: AppBar(
-        title: const Text('Settings'),
-        backgroundColor: Colors.grey[900],
+        title: Text(
+          'Settings',
+          style: AppTextStyles.body.copyWith(
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        backgroundColor: AppColors.backgroundPrimary,
+        elevation: 0,
       ),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: AppSpacing.screenPadding,
           children: [
-            // Survey Configuration
+            // Survey Configuration Section
             _buildSectionHeader('Survey Configuration'),
-            _buildTextField(
-              controller: _surveyNameController,
-              label: 'Survey Name',
-              hint: 'Enter cave/site name',
-            ),
-            const SizedBox(height: 20),
-
-            // Hardware Configuration
-            _buildSectionHeader('Hardware Configuration'),
-            _buildTextField(
-              controller: _wheelCircumferenceController,
-              label: 'Wheel Circumference (m)',
-              hint: '0.263',
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Measure your 3D-printed wheel diameter and calculate circumference: π × diameter',
-              style: TextStyle(
-                color: Colors.grey[500],
-                fontSize: 12,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Sensor Configuration
-            _buildSectionHeader('Sensor Configuration'),
-            _buildTextField(
-              controller: _minPeakThresholdController,
-              label: 'Minimum Peak Threshold (μT)',
-              hint: '50.0',
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            ),
-            const SizedBox(height: 12),
-            _buildTextField(
-              controller: _maxPeakThresholdController,
-              label: 'Maximum Peak Threshold (μT)',
-              hint: '200.0',
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Min/Max magnetic field strength to detect wheel rotation. Adjust if getting false detections or missing rotations.',
-              style: TextStyle(
-                color: Colors.grey[500],
-                fontSize: 12,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Live Magnetometer Readout
-            _buildSectionHeader('Magnetometer Sensor'),
-            Consumer<MagnetometerService>(
-              builder: (context, magnetometer, child) {
-                return Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[900],
-                    borderRadius: BorderRadius.circular(8),
+            const SizedBox(height: AppSpacing.small),
+            InfoCard(
+              child: Column(
+                children: [
+                  _buildTextField(
+                    controller: _surveyNameController,
+                    label: 'Survey Name',
+                    hint: 'Enter cave/site name',
                   ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.medium),
+
+            // Wheel Settings Section
+            _buildSectionHeader('Wheel Settings'),
+            const SizedBox(height: AppSpacing.small),
+            InfoCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildTextField(
+                    controller: _wheelDiameterController,
+                    label: 'Diameter (mm)',
+                    hint: '43.0',
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Measure wheel diameter in millimeters',
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.textSecondary,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.medium),
+
+            // Sensor Configuration Section
+            _buildSectionHeader('Sensor Configuration'),
+            const SizedBox(height: AppSpacing.small),
+            InfoCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildTextField(
+                    controller: _minPeakThresholdController,
+                    label: 'Min Peak Threshold (μT)',
+                    hint: '50.0',
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  ),
+                  const SizedBox(height: AppSpacing.small),
+                  _buildTextField(
+                    controller: _maxPeakThresholdController,
+                    label: 'Max Peak Threshold (μT)',
+                    hint: '200.0',
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Magnetic field range for wheel rotation detection',
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.textSecondary,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xLarge),
+
+            // Live Magnetometer Section
+            _buildSectionHeader('Magnetic Field Readout'),
+            const SizedBox(height: AppSpacing.small),
+            Consumer2<MagnetometerService, CompassService>(
+              builder: (context, magnetometer, compass, child) {
+                return InfoCard(
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildSensorRow('X:', magnetometer.magnetometerX, 'μT'),
-                      const SizedBox(height: 8),
-                      _buildSensorRow('Y:', magnetometer.magnetometerY, 'μT'),
-                      const SizedBox(height: 8),
-                      _buildSensorRow('Z:', magnetometer.magnetometerZ, 'μT'),
-                      const Divider(color: Colors.grey, height: 24),
-                      _buildSensorRow('Magnitude:', magnetometer.magneticStrength, 'μT', highlight: true),
+                      Text(
+                        'Magnetometer (μT)',
+                        style: AppTextStyles.body.copyWith(
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.small),
+                      _buildSensorRow('X', magnetometer.magnetometerX),
+                      const SizedBox(height: 6),
+                      _buildSensorRow('Y', magnetometer.magnetometerY),
+                      const SizedBox(height: 6),
+                      _buildSensorRow('Z', magnetometer.magnetometerZ),
+                      const Divider(height: 20),
+                      _buildSensorRow('Magnitude', magnetometer.magneticStrength, highlight: true),
+                      const SizedBox(height: AppSpacing.small),
+                      Text(
+                        'Compass',
+                        style: AppTextStyles.body.copyWith(
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.small),
+                      _buildSensorRow('Heading', compass.heading, suffix: '°'),
+                      const SizedBox(height: 6),
+                      _buildSensorRow('Accuracy', compass.accuracy, suffix: '°'),
                     ],
                   ),
                 );
               },
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: AppSpacing.medium),
 
-            // Data Export
+            // Data Export Section
             _buildSectionHeader('Data Export'),
+            const SizedBox(height: AppSpacing.small),
             Row(
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () => _exportData('csv'),
-                    icon: const Icon(Icons.table_chart),
+                    icon: const Icon(Icons.file_download),
                     label: const Text('Export CSV'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      backgroundColor: AppColors.actionExportCSV,
+                      foregroundColor: AppColors.textPrimary,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                   ),
                 ),
@@ -265,75 +321,140 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () => _exportData('therion'),
-                    icon: const Icon(Icons.terrain),
+                    icon: const Icon(Icons.map),
                     label: const Text('Export Therion'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      backgroundColor: AppColors.actionExportTherion,
+                      foregroundColor: AppColors.textPrimary,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: AppSpacing.medium),
 
-            // About
-            _buildSectionHeader('About'),
-            ListTile(
-              leading: const Icon(Icons.info_outline, color: Colors.blue),
-              title: const Text('About CaveDiveMap', style: TextStyle(color: Colors.white)),
-              trailing: const Icon(Icons.chevron_right, color: Colors.grey),
-              onTap: _showAboutDialog,
-              tileColor: Colors.grey[900],
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+            // Button Customization Section
+            _buildSectionHeader('Interface'),
+            const SizedBox(height: AppSpacing.small),
+            InfoCard(
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.touch_app, color: AppColors.textPrimary),
+                title: Text(
+                  'Button Customization',
+                  style: AppTextStyles.body.copyWith(
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                subtitle: Text(
+                  'Adjust button size and position',
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                trailing: Icon(Icons.chevron_right, color: AppColors.textSecondary),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ButtonCustomizationScreen(),
+                    ),
+                  );
+                },
               ),
             ),
-            const SizedBox(height: 12),
-            ListTile(
-              leading: const Icon(Icons.code, color: Colors.orange),
-              title: const Text('View on GitHub', style: TextStyle(color: Colors.white)),
-              trailing: const Icon(Icons.open_in_new, color: Colors.grey),
-              onTap: () {
-                // TODO: Open GitHub repository
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('GitHub link: github.com/f0xdude/CaveDiveMap')),
-                );
-              },
-              tileColor: Colors.grey[900],
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+            const SizedBox(height: AppSpacing.medium),
+
+            // Links Section
+            _buildSectionHeader('Information'),
+            const SizedBox(height: AppSpacing.small),
+            InfoCard(
+              child: Column(
+                children: [
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.help_outline, color: AppColors.textPrimary),
+                    title: Text(
+                      'Documentation',
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    trailing: Icon(Icons.open_in_new, color: AppColors.textSecondary),
+                    onTap: () => _launchURL('https://github.com/f0xdude/CaveDiveMap'),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.print, color: AppColors.textPrimary),
+                    title: Text(
+                      '3D Print Files',
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    trailing: Icon(Icons.open_in_new, color: AppColors.textSecondary),
+                    onTap: () => _launchURL('https://www.thingiverse.com/thing:6950056'),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.info_outline, color: AppColors.textPrimary),
+                    title: Text(
+                      'About',
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    trailing: Icon(Icons.chevron_right, color: AppColors.textSecondary),
+                    onTap: _showAboutDialog,
+                  ),
+                ],
               ),
             ),
+            const SizedBox(height: AppSpacing.large),
+
+            // Save Button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _saveSettings,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.actionSave,
+                  foregroundColor: AppColors.textPrimary,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                child: const Text('Save Settings', style: TextStyle(fontSize: 18)),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.large),
           ],
-        ),
-      ),
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.all(16),
-        child: ElevatedButton(
-          onPressed: _saveSettings,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.green,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-          ),
-          child: const Text('Save Settings', style: TextStyle(fontSize: 16)),
         ),
       ),
     );
   }
 
+  Future<void> _launchURL(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open $url')),
+        );
+      }
+    }
+  }
+
   Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Text(
-        title,
-        style: const TextStyle(
-          color: Colors.cyan,
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-        ),
+    return Text(
+      title,
+      style: AppTextStyles.body.copyWith(
+        color: AppColors.dataPrimary,
+        fontWeight: FontWeight.bold,
+        fontSize: 16,
       ),
     );
   }
@@ -347,45 +468,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
-      style: const TextStyle(color: Colors.white),
+      style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: Colors.grey),
+        labelStyle: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
         hintText: hint,
-        hintStyle: TextStyle(color: Colors.grey[600]),
+        hintStyle: AppTextStyles.body.copyWith(color: AppColors.textHint),
         filled: true,
-        fillColor: Colors.grey[900],
+        fillColor: AppColors.backgroundSecondary,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Colors.cyan, width: 2),
+          borderSide: BorderSide(color: AppColors.dataPrimary, width: 2),
         ),
       ),
     );
   }
 
-  Widget _buildSensorRow(String label, double value, String unit, {bool highlight = false}) {
+  Widget _buildSensorRow(String label, double value, {String suffix = 'μT', bool highlight = false}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
           label,
-          style: TextStyle(
-            color: highlight ? Colors.cyan : Colors.grey[400],
-            fontSize: 16,
+          style: AppTextStyles.body.copyWith(
+            color: highlight ? AppColors.dataPrimary : AppColors.textSecondary,
             fontWeight: highlight ? FontWeight.bold : FontWeight.normal,
           ),
         ),
-        Text(
-          '${value.toStringAsFixed(2)} $unit',
-          style: TextStyle(
-            color: highlight ? Colors.cyan : Colors.white,
-            fontSize: 16,
+        MonospacedText(
+          '${value.toStringAsFixed(2)} $suffix',
+          style: AppTextStyles.body.copyWith(
+            color: highlight ? AppColors.dataPrimary : AppColors.textPrimary,
             fontWeight: FontWeight.bold,
-            fontFeatures: const [FontFeature.tabularFigures()],
           ),
         ),
       ],
