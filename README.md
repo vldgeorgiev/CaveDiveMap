@@ -2,58 +2,64 @@
 
 **Cross-platform mobile app** (iOS & Android) for underwater cave surveying using magnetometer-based distance measurement.
 
-> **Note**: This repository now contains the Flutter cross-platform version. The original Swift iOS app is archived in `archive/swift-ios-app/`.
+> **Migration Note**: This repository now contains the Flutter cross-platform version. The original Swift iOS app is archived in `archive/swift-ios-app/` and remains available on the [App Store](https://apps.apple.com/bg/app/cavedivemap/id6743342160).
 
 ## Overview
 
-## How It Works
+CaveDiveMap turns your smartphone into a cave survey tool by combining a simple 3D-printed measurement device with the phone's built-in sensors.
+
+### How It Works
 
 **Concept**:
-The app uses the magnetometer to detect the proximity of a magnet on a wheel.
-The wheel is clamped around the cave diving line and rotates as the diver moves the device forward.
-Each rotation the app detects the peak magnetic field value and by knowing the diameter/circumference of the wheel measures the distance traveled along the line.
+
+The app uses the magnetometer to detect the proximity of a magnet embedded in a measurement wheel. The wheel is clamped around the cave diving guideline and rotates as the diver moves the device forward. Each rotation triggers a peak in the magnetic field, and by knowing the wheel's circumference, the app calculates the distance traveled along the line.
 
 **Data Captured**:
-- Point number
-- Compass heading
-- Distance (total from the first point)
-- Depth (user can adjust via 2 buttons on the dive case)
+
+- Point number (sequential)
+- Compass heading (magnetic degrees)
+- Distance (cumulative from start point)
+- Depth (manually adjusted via buttons)
+- Passage dimensions (left/right/up/down at manual survey stations)
 
 **Survey Types**:
+
 - **Automatic points**: Created each wheel rotation with distance/heading/depth
-- **Manual points**: Added by the diver at each tie-off point with passage dimensions (left/right/up/down)
+- **Manual points**: Added by diver at tie-off stations with passage dimensions
 
 **Export Formats**:
-- CSV (all survey data)
-- Therion (cave survey software format)
-- Share via mobile share options
+
+- **CSV**: Complete survey data for spreadsheets and analysis
+- **Therion**: Cave survey software format for professional mapping
+- Share via mobile share options (iOS/Android)
 
 **Live Visualization**:
+
 - 2D map view for reference during the dive
 - Touch gestures: pan, zoom, rotate
 - North-oriented compass overlay
-- Wall profiles from manual points
+- Wall profiles rendered from manual point dimensions
 
 ## Current Status
 
-- **Flutter Version** (Cross-platform): Active development in `flutter-app/` - iOS & Android support
-- **Swift Version** (iOS only): Archived in `archive/swift-ios-app/` - Available on [App Store](https://apps.apple.com/bg/app/cavedivemap/id6743342160)
+- **Flutter Version** (iOS & Android): Active development in `flutter-app/`
+- **Swift Version** (iOS only): Archived in `archive/swift-ios-app/`, still available on [App Store](https://apps.apple.com/bg/app/cavedivemap/id6743342160)
 
 ## Repository Structure
 
 ```text
 CaveDiveMap/
-├── flutter-app/          # Active Flutter cross-platform app
+├── flutter-app/          # Active cross-platform Flutter app
 │   ├── lib/
 │   │   ├── models/       # Data models (SurveyData, Settings)
 │   │   ├── services/     # Core services (Storage, Magnetometer, Compass, Export)
 │   │   └── screens/      # UI screens (Main, SaveData, Settings, Map)
 │   └── pubspec.yaml      # Flutter dependencies
-├── archive/              # Archived Swift iOS app
+├── archive/              # Archived Swift iOS app (reference)
 │   └── swift-ios-app/    # Original iOS implementation
-├── openspec/             # Specification-driven development docs
+├── openspec/             # Spec-driven development documentation
 │   ├── project.md        # Technical project context
-│   └── changes/          # Change proposals and specs
+│   └── AGENTS.md         # AI development workflow guide
 ├── tools/                # Python utilities (PointCloud2Map.py)
 └── Manual/               # Screenshots and documentation
 ```
@@ -78,46 +84,92 @@ flutter run
 
 **Key Dependencies**:
 
-- `sensors_plus 7.0.0` - Magnetometer/compass access
+- `sensors_plus 7.0.0` - Magnetometer access
 - `flutter_compass 0.8.1` - Compass heading
-- `hive 2.2.3` - Local storage
+- `hive 2.2.3` - Local storage (NoSQL database)
 - `provider 6.1.5` - State management
 - `share_plus` - Export functionality
 
 ### Archived iOS App
 
-See `archive/README.md` for building the original Swift version.
-
-## Credits
-
-**Original Swift iOS app**: Code entirely written by ChatGPT (2024)
-**Flutter migration**: Spec-driven development with AI assistance (2025)
-
-*Developer note: I don't code in Swift or iOS - this project was built entirely through AI collaboration.*
+See `archive/README.md` for building the original Swift version (reference only).
 
 ## Hardware Device
 
-**3D Printed Measurement Wheel**:
-The app requires a 3D printed device attached to an iPhone dive case. The device contains the measuring wheel and guideline clamp mechanism.
+### 3D Printed Measurement Wheel
+
+The app requires a 3D-printed device attached to a smartphone in a waterproof dive case. The device contains the measuring wheel and guideline clamp mechanism.
 
 **Design Goals**:
 
-I wanted the device to be fully 3D printable, so you can make it in any place where there is a 3D printer available.
-No springs, screws, nuts or other hardware required.
+Fully 3D printable so you can make it anywhere with a 3D printer available. No screws, nuts, springs, or other hardware required.
 
 **Non-Printed Parts**:
 
-- Rubber band for keeping the slider gate clamped down/tensioned on the cave line
-- Small magnet 8mm in diameter (available in hardware stores)
+- Rubber band (keeps slider gate clamped/tensioned on the cave line)
+- Small 8mm diameter magnet (available in hardware stores)
 
 **Resources**:
 
 - **STL Files**: [Thingiverse](https://www.thingiverse.com/thing:6950056)
 - **Dive Case** (iPhone 15): [AliExpress Link](https://hz.aliexpress.com/i/1005005277943648.html)
 
-## Screenshots
-![screenshot](Manual/front.jpg)
+### Screenshots
 
+![Front View](Manual/front.jpg)
 
-The example live map view:
-![screenshot](Manual/map-view.jpg)
+Live map view during dive:
+
+![Map View](Manual/map-view.jpg)
+
+## Features
+
+### Magnetometer Distance Measurement
+
+- Peak detection algorithm identifies each wheel rotation
+- Configurable wheel circumference for accurate measurements
+- Automatic survey point generation
+
+### Manual Survey Stations
+
+- Add points at tie-off locations with passage dimensions
+- Cyclic parameter editing (depth → left → right → up → down)
+- Press-and-hold for rapid value adjustment
+
+### Data Export
+
+- **CSV format**: All survey fields for analysis
+- **Therion format**: Professional cave survey software compatibility
+- Cross-platform sharing (iOS share sheet, Android share intent)
+
+### Button Customization
+
+- Reposition and resize all interface buttons
+- Essential for underwater usability with thick waterproof cases
+- Settings persist across app launches
+
+### Compass Calibration
+
+- User-triggered calibration flow
+- Real-time heading accuracy feedback
+- Platform-specific calibration UI (iOS/Android)
+
+## Credits
+
+**Original Swift iOS app**: Code entirely written by ChatGPT (2024)
+
+**Flutter migration**: Spec-driven development with AI assistance (2025)
+
+*Developer note: I don't code in Swift or iOS - this project was built entirely through AI collaboration.*
+
+## License
+
+See repository for license details.
+
+## Resources
+
+- **App Store**: <https://apps.apple.com/bg/app/cavedivemap/id6743342160>
+- **3D Print Files**: <https://www.thingiverse.com/thing:6950056>
+- **Flutter App**: See `flutter-app/README.md` for setup details
+- **Technical Docs**: See `openspec/project.md` for architecture details
+- **AI Development**: See `AGENTS.md` for AI assistant instructions
