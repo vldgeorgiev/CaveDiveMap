@@ -11,10 +11,7 @@ import '../utils/theme_extensions.dart';
 class HeadingAccuracyIndicator extends StatelessWidget {
   final double accuracy;
 
-  const HeadingAccuracyIndicator({
-    super.key,
-    required this.accuracy,
-  });
+  const HeadingAccuracyIndicator({super.key, required this.accuracy});
 
   @override
   Widget build(BuildContext context) {
@@ -26,18 +23,13 @@ class HeadingAccuracyIndicator extends StatelessWidget {
       children: [
         Text(
           'Heading error: ${accuracy.toStringAsFixed(2)}',
-          style: AppTextStyles.largeTitle.copyWith(
-            fontSize: 28,
-          ),
+          style: AppTextStyles.largeTitle.copyWith(fontSize: 28),
         ),
         const SizedBox(width: AppSpacing.small),
         Container(
           width: 25,
           height: 25,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: color,
-          ),
+          decoration: BoxDecoration(shape: BoxShape.circle, color: color),
         ),
       ],
     );

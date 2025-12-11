@@ -89,7 +89,8 @@ class _MapScreenState extends State<MapScreen> {
                     _scale = (_scale * details.scale).clamp(5.0, 100.0);
 
                     // Handle rotation (two-finger twist)
-                    _rotation = _baseRotation + (details.rotation * 180 / math.pi);
+                    _rotation =
+                        _baseRotation + (details.rotation * 180 / math.pi);
                   });
                 },
                 child: CustomPaint(
@@ -115,11 +116,7 @@ class _MapScreenState extends State<MapScreen> {
               ),
 
               // Scale indicator
-              Positioned(
-                bottom: 16,
-                left: 16,
-                child: _buildScaleIndicator(),
-              ),
+              Positioned(bottom: 16, left: 16, child: _buildScaleIndicator()),
 
               // Stats overlay
               Positioned(
@@ -129,11 +126,7 @@ class _MapScreenState extends State<MapScreen> {
               ),
 
               // Export buttons
-              Positioned(
-                bottom: 20,
-                left: 20,
-                child: _buildExportButtons(),
-              ),
+              Positioned(bottom: 20, left: 20, child: _buildExportButtons()),
             ],
           );
         },
@@ -161,10 +154,7 @@ class _MapScreenState extends State<MapScreen> {
         alignment: Alignment.center,
         children: [
           // Compass rose background
-          CustomPaint(
-            size: const Size(80, 80),
-            painter: CompassRosePainter(),
-          ),
+          CustomPaint(size: const Size(80, 80), painter: CompassRosePainter()),
           // North indicator (red arrow)
           Transform.rotate(
             angle: -(heading + _rotation) * math.pi / 180,
@@ -172,12 +162,7 @@ class _MapScreenState extends State<MapScreen> {
               Icons.navigation,
               color: AppColors.actionReset,
               size: 44,
-              shadows: const [
-                Shadow(
-                  color: Colors.black,
-                  blurRadius: 4,
-                ),
-              ],
+              shadows: const [Shadow(color: Colors.black, blurRadius: 4)],
             ),
           ),
           // North label
@@ -192,10 +177,7 @@ class _MapScreenState extends State<MapScreen> {
                   fontSize: 16,
                   fontWeight: FontWeight.w900,
                   shadows: [
-                    Shadow(
-                      color: Colors.black.withOpacity(0.9),
-                      blurRadius: 6,
-                    ),
+                    Shadow(color: Colors.black.withOpacity(0.9), blurRadius: 6),
                   ],
                 ),
               ),
@@ -219,11 +201,7 @@ class _MapScreenState extends State<MapScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 50,
-            height: 4,
-            color: Colors.white,
-          ),
+          Container(width: 50, height: 4, color: Colors.white),
           const SizedBox(height: 4),
           Text(
             '$scaleMeters m',
@@ -259,11 +237,7 @@ class _MapScreenState extends State<MapScreen> {
                 ),
               ],
             ),
-            child: const Icon(
-              Icons.upload_file,
-              color: Colors.white,
-              size: 28,
-            ),
+            child: const Icon(Icons.upload_file, color: Colors.white, size: 28),
           ),
         ),
         const SizedBox(height: 16),
@@ -284,11 +258,7 @@ class _MapScreenState extends State<MapScreen> {
                 ),
               ],
             ),
-            child: const Icon(
-              Icons.description,
-              color: Colors.white,
-              size: 28,
-            ),
+            child: const Icon(Icons.description, color: Colors.white, size: 28),
           ),
         ),
       ],
@@ -317,17 +287,21 @@ class _MapScreenState extends State<MapScreen> {
         return;
       }
 
-      final fileName = 'cave_survey_${DateTime.now().millisecondsSinceEpoch ~/ 1000}';
-      await exportService.exportAndShareCSV(surveyData, fileName);
+      final fileName =
+          'cave_survey_${DateTime.now().millisecondsSinceEpoch ~/ 1000}';
+      final file = await exportService.exportAndShareCSV(surveyData, fileName);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'CSV exported successfully',
-              style: AppTextStyles.body.copyWith(color: Colors.white),
+              'CSV exported successfully\n${_truncatePath(file.path)}',
+              style: AppTextStyles.body.copyWith(
+                color: Colors.white,
+                fontFamily: 'monospace',
+              ),
             ),
             backgroundColor: AppColors.actionExportCSV,
-            duration: const Duration(seconds: 2),
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -369,17 +343,24 @@ class _MapScreenState extends State<MapScreen> {
         return;
       }
 
-      final surveyName = 'cave_survey_${DateTime.now().millisecondsSinceEpoch ~/ 1000}';
-      await exportService.exportAndShareTherion(surveyData, surveyName);
+      final surveyName =
+          'cave_survey_${DateTime.now().millisecondsSinceEpoch ~/ 1000}';
+      final file = await exportService.exportAndShareTherion(
+        surveyData,
+        surveyName,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Therion file exported successfully',
-              style: AppTextStyles.body.copyWith(color: Colors.white),
+              'Therion file exported successfully\n${_truncatePath(file.path)}',
+              style: AppTextStyles.body.copyWith(
+                color: Colors.white,
+                fontFamily: 'monospace',
+              ),
             ),
             backgroundColor: AppColors.actionExportTherion,
-            duration: const Duration(seconds: 2),
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -397,6 +378,16 @@ class _MapScreenState extends State<MapScreen> {
         );
       }
     }
+  }
+
+  String _truncatePath(String path, {int maxLength = 60}) {
+    if (path.length <= maxLength) return path;
+
+    final parts = path.split('/');
+    final filename = parts.last;
+    final start = parts.take(2).join('/');
+
+    return '$start/.../$filename';
   }
 
   Widget _buildStatsOverlay(List<SurveyData> surveyData) {
@@ -425,7 +416,11 @@ class _MapScreenState extends State<MapScreen> {
           ),
           Text(
             'Distance: ${totalDistance.toStringAsFixed(1)} m',
-            style: const TextStyle(color: Colors.cyan, fontSize: 12, fontWeight: FontWeight.bold),
+            style: const TextStyle(
+              color: Colors.cyan,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),
@@ -509,20 +504,12 @@ class CaveMapPainter extends CustomPainter {
 
     // Vertical lines
     for (double x = -extent; x < extent; x += gridSpacing) {
-      canvas.drawLine(
-        Offset(x, -extent),
-        Offset(x, extent),
-        gridPaint,
-      );
+      canvas.drawLine(Offset(x, -extent), Offset(x, extent), gridPaint);
     }
 
     // Horizontal lines
     for (double y = -extent; y < extent; y += gridSpacing) {
-      canvas.drawLine(
-        Offset(-extent, y),
-        Offset(extent, y),
-        gridPaint,
-      );
+      canvas.drawLine(Offset(-extent, y), Offset(extent, y), gridPaint);
     }
   }
 
@@ -543,7 +530,11 @@ class CaveMapPainter extends CustomPainter {
     canvas.drawPath(path, linePaint);
   }
 
-  void _drawPassageWalls(Canvas canvas, List<Offset> points, List<SurveyData> data) {
+  void _drawPassageWalls(
+    Canvas canvas,
+    List<Offset> points,
+    List<SurveyData> data,
+  ) {
     final wallPaint = Paint()
       ..color = Colors.blue.withOpacity(0.3)
       ..style = PaintingStyle.fill;
@@ -555,7 +546,6 @@ class CaveMapPainter extends CustomPainter {
       // Only draw walls for manual points with dimensions
       if (surveyPoint.rtype == 'manual' &&
           (surveyPoint.left > 0 || surveyPoint.right > 0)) {
-
         final headingRad = surveyPoint.heading * math.pi / 180;
         final perpRad = headingRad + math.pi / 2; // Perpendicular to heading
 
@@ -593,7 +583,11 @@ class CaveMapPainter extends CustomPainter {
         ..color = surveyPoint.rtype == 'manual' ? Colors.green : Colors.cyan
         ..style = PaintingStyle.fill;
 
-      canvas.drawCircle(point, surveyPoint.rtype == 'manual' ? 5 : 3, pointPaint);
+      canvas.drawCircle(
+        point,
+        surveyPoint.rtype == 'manual' ? 5 : 3,
+        pointPaint,
+      );
     }
   }
 
@@ -620,16 +614,19 @@ class CaveMapPainter extends CustomPainter {
     textPainter.layout();
     textPainter.paint(
       canvas,
-      Offset(point.dx - textPainter.width / 2, point.dy - textPainter.height / 2),
+      Offset(
+        point.dx - textPainter.width / 2,
+        point.dy - textPainter.height / 2,
+      ),
     );
   }
 
   @override
   bool shouldRepaint(CaveMapPainter oldDelegate) {
     return oldDelegate.surveyData != surveyData ||
-           oldDelegate.scale != scale ||
-           oldDelegate.offset != offset ||
-           oldDelegate.rotation != rotation;
+        oldDelegate.scale != scale ||
+        oldDelegate.offset != offset ||
+        oldDelegate.rotation != rotation;
   }
 }
 

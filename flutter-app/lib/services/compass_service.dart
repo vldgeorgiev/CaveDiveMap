@@ -15,7 +15,8 @@ class CompassService extends ChangeNotifier {
   double? get currentHeading => _currentHeading;
   double get heading => _currentHeading ?? 0.0; // Non-nullable for convenience
   double? get headingAccuracy => _headingAccuracy;
-  double get accuracy => _headingAccuracy ?? 999.0; // Non-nullable, high value if unknown
+  double get accuracy =>
+      _headingAccuracy ?? 999.0; // Non-nullable, high value if unknown
   bool get isActive => _isActive;
   bool get isCalibrated => _isCalibrated;
 
@@ -53,7 +54,9 @@ class CompassService extends ChangeNotifier {
   void _onCompassEvent(CompassEvent event) {
     // Ensure heading is always positive (0-360°)
     if (event.heading != null) {
-      _currentHeading = event.heading! < 0 ? event.heading! + 360 : event.heading;
+      _currentHeading = event.heading! < 0
+          ? event.heading! + 360
+          : event.heading;
     } else {
       _currentHeading = event.heading;
     }

@@ -28,7 +28,8 @@ class MonospacedText extends StatelessWidget {
     // If style is provided, use it as base and merge individual properties
     final baseStyle = style ?? const TextStyle();
     final effectiveFontSize = fontSize ?? baseStyle.fontSize ?? 36;
-    final effectiveFontWeight = fontWeight ?? baseStyle.fontWeight ?? FontWeight.bold;
+    final effectiveFontWeight =
+        fontWeight ?? baseStyle.fontWeight ?? FontWeight.bold;
     final effectiveColor = color ?? baseStyle.color ?? AppColors.textPrimary;
 
     return Text(

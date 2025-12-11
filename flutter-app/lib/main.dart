@@ -15,14 +15,13 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Enable fullscreen mode (hide all system UI)
-  SystemChrome.setEnabledSystemUIMode(
-    SystemUiMode.immersiveSticky,
-  );
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
   // Disable Provider type checking for non-Listenable services
   Provider.debugCheckInvalidValueType = null;
 
-  // Initialize storage service
+  // Initialize storage service and reload all persisted data
+  // Survey data automatically loads from Hive on startup
   final storageService = StorageService();
   await storageService.initialize();
 
@@ -30,8 +29,7 @@ void main() async {
   final settings = await storageService.loadSettings();
 
   // Initialize and load button customization settings
-  final buttonCustomizationService =
-      ButtonCustomizationService(storageService);
+  final buttonCustomizationService = ButtonCustomizationService(storageService);
   await buttonCustomizationService.loadSettings();
 
   // Apply wakelock based on settings
@@ -39,11 +37,13 @@ void main() async {
     WakelockPlus.enable();
   }
 
-  runApp(CaveDiveMapApp(
-    storageService: storageService,
-    initialSettings: settings,
-    buttonCustomizationService: buttonCustomizationService,
-  ));
+  runApp(
+    CaveDiveMapApp(
+      storageService: storageService,
+      initialSettings: settings,
+      buttonCustomizationService: buttonCustomizationService,
+    ),
+  );
 }
 
 class CaveDiveMapApp extends StatelessWidget {
@@ -63,14 +63,10 @@ class CaveDiveMapApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         // Storage service (non-listenable service)
-        Provider<StorageService>(
-          create: (_) => storageService,
-        ),
+        Provider<StorageService>(create: (_) => storageService),
 
         // Settings
-        ChangeNotifierProvider<Settings>(
-          create: (_) => initialSettings,
-        ),
+        ChangeNotifierProvider<Settings>(create: (_) => initialSettings),
 
         // Button customization service
         ChangeNotifierProvider<ButtonCustomizationService>(
@@ -92,9 +88,7 @@ class CaveDiveMapApp extends StatelessWidget {
         ),
 
         // Compass service
-        ChangeNotifierProvider(
-          create: (_) => CompassService(),
-        ),
+        ChangeNotifierProvider(create: (_) => CompassService()),
 
         // Export service
         Provider(create: (_) => ExportService()),

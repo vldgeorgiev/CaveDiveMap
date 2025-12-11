@@ -19,8 +19,7 @@ class ButtonCustomizationScreen extends StatefulWidget {
       _ButtonCustomizationScreenState();
 }
 
-class _ButtonCustomizationScreenState
-    extends State<ButtonCustomizationScreen> {
+class _ButtonCustomizationScreenState extends State<ButtonCustomizationScreen> {
   ScreenType _selectedScreen = ScreenType.mainScreen;
   String? _selectedButtonId; // Track which button is selected for editing
   bool _isFullScreenMode = false; // Track if in full-screen edit mode
@@ -29,18 +28,20 @@ class _ButtonCustomizationScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,
-      appBar: _isFullScreenMode ? null : AppBar(
-        backgroundColor: AppColors.backgroundPrimary,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: AppColors.textPrimary),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          'Button Customization',
-          style: AppTextStyles.headline,
-        ),
-      ),
+      appBar: _isFullScreenMode
+          ? null
+          : AppBar(
+              backgroundColor: AppColors.backgroundPrimary,
+              elevation: 0,
+              leading: IconButton(
+                icon: Icon(Icons.arrow_back, color: AppColors.textPrimary),
+                onPressed: () => Navigator.pop(context),
+              ),
+              title: Text(
+                'Button Customization',
+                style: AppTextStyles.headline,
+              ),
+            ),
       body: Consumer<ButtonCustomizationService>(
         builder: (context, service, child) {
           return Stack(
@@ -57,7 +58,9 @@ class _ButtonCustomizationScreenState
 
                     // Instructions
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.medium),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.medium,
+                      ),
                       child: Container(
                         padding: const EdgeInsets.all(AppSpacing.medium),
                         decoration: BoxDecoration(
@@ -102,8 +105,7 @@ class _ButtonCustomizationScreenState
                 ),
 
               // Full-screen edit mode overlay
-              if (_isFullScreenMode)
-                _buildFullScreenEditor(service),
+              if (_isFullScreenMode) _buildFullScreenEditor(service),
             ],
           );
         },
@@ -127,7 +129,8 @@ class _ButtonCustomizationScreenState
                 _selectedScreen == ScreenType.mainScreen,
                 () => setState(() {
                   _selectedScreen = ScreenType.mainScreen;
-                  _selectedButtonId = null; // Clear selection when switching screens
+                  _selectedButtonId =
+                      null; // Clear selection when switching screens
                 }),
               ),
             ),
@@ -138,7 +141,8 @@ class _ButtonCustomizationScreenState
                 _selectedScreen == ScreenType.saveDataScreen,
                 () => setState(() {
                   _selectedScreen = ScreenType.saveDataScreen;
-                  _selectedButtonId = null; // Clear selection when switching screens
+                  _selectedButtonId =
+                      null; // Clear selection when switching screens
                 }),
               ),
             ),
@@ -148,7 +152,11 @@ class _ButtonCustomizationScreenState
     );
   }
 
-  Widget _buildSegmentButton(String label, bool isSelected, VoidCallback onTap) {
+  Widget _buildSegmentButton(
+    String label,
+    bool isSelected,
+    VoidCallback onTap,
+  ) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -165,7 +173,9 @@ class _ButtonCustomizationScreenState
           child: Text(
             label,
             style: AppTextStyles.body.copyWith(
-              color: isSelected ? AppColors.backgroundPrimary : AppColors.textPrimary,
+              color: isSelected
+                  ? AppColors.backgroundPrimary
+                  : AppColors.textPrimary,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -236,7 +246,10 @@ class _ButtonCustomizationScreenState
           builder: (context, constraints) {
             // Calculate top bar height to constrain button movement
             const topBarHeight = 100.0; // Compact top bar
-            final screenSize = Size(constraints.maxWidth, constraints.maxHeight);
+            final screenSize = Size(
+              constraints.maxWidth,
+              constraints.maxHeight,
+            );
 
             return Stack(
               children: [
@@ -246,9 +259,7 @@ class _ButtonCustomizationScreenState
                   left: 0,
                   right: 0,
                   bottom: 0,
-                  child: CustomPaint(
-                    painter: _CenterCrosshairPainter(),
-                  ),
+                  child: CustomPaint(painter: _CenterCrosshairPainter()),
                 ),
 
                 // All buttons for current screen (constrained below top bar)
@@ -313,7 +324,8 @@ class _ButtonCustomizationScreenState
                           ],
                         ),
                         // Size slider (compact, only when button selected)
-                        if (selectedConfig != null && selectedLabel != null) ...[
+                        if (selectedConfig != null &&
+                            selectedLabel != null) ...[
                           const SizedBox(height: AppSpacing.small),
                           Row(
                             children: [
@@ -337,7 +349,8 @@ class _ButtonCustomizationScreenState
                                     activeTrackColor: AppColors.dataPrimary,
                                     inactiveTrackColor: AppColors.textSecondary,
                                     thumbColor: AppColors.dataPrimary,
-                                    overlayColor: AppColors.dataPrimary.withOpacity(0.2),
+                                    overlayColor: AppColors.dataPrimary
+                                        .withOpacity(0.2),
                                     trackHeight: 3,
                                   ),
                                   child: Slider(
@@ -506,9 +519,7 @@ class _ButtonCustomizationScreenState
       decoration: BoxDecoration(
         color: AppColors.backgroundSecondary,
         border: Border(
-          top: BorderSide(
-            color: AppColors.textSecondary.withOpacity(0.3),
-          ),
+          top: BorderSide(color: AppColors.textSecondary.withOpacity(0.3)),
         ),
       ),
       padding: const EdgeInsets.all(AppSpacing.medium),
@@ -643,35 +654,50 @@ class _ButtonCustomizationScreenState
     }
   }
 
-  void _updateSelectedButtonSize(ButtonCustomizationService service, double size) {
+  void _updateSelectedButtonSize(
+    ButtonCustomizationService service,
+    double size,
+  ) {
     if (_selectedButtonId == null) return;
 
     switch (_selectedButtonId) {
       case 'main_save':
-        service.updateMainSaveButton(service.mainSaveButton.copyWith(size: size));
+        service.updateMainSaveButton(
+          service.mainSaveButton.copyWith(size: size),
+        );
         break;
       case 'main_map':
         service.updateMainMapButton(service.mainMapButton.copyWith(size: size));
         break;
       case 'main_reset':
-        service.updateMainResetButton(service.mainResetButton.copyWith(size: size));
+        service.updateMainResetButton(
+          service.mainResetButton.copyWith(size: size),
+        );
         break;
       case 'main_camera':
-        service.updateMainCameraButton(service.mainCameraButton.copyWith(size: size));
+        service.updateMainCameraButton(
+          service.mainCameraButton.copyWith(size: size),
+        );
         break;
       case 'save_save':
-        service.updateSaveDataSaveButton(service.saveDataSaveButton.copyWith(size: size));
+        service.updateSaveDataSaveButton(
+          service.saveDataSaveButton.copyWith(size: size),
+        );
         break;
       case 'save_increment':
         service.updateSaveDataIncrementButton(
-            service.saveDataIncrementButton.copyWith(size: size));
+          service.saveDataIncrementButton.copyWith(size: size),
+        );
         break;
       case 'save_decrement':
         service.updateSaveDataDecrementButton(
-            service.saveDataDecrementButton.copyWith(size: size));
+          service.saveDataDecrementButton.copyWith(size: size),
+        );
         break;
       case 'save_cycle':
-        service.updateSaveDataCycleButton(service.saveDataCycleButton.copyWith(size: size));
+        service.updateSaveDataCycleButton(
+          service.saveDataCycleButton.copyWith(size: size),
+        );
         break;
     }
   }
@@ -694,7 +720,9 @@ class _ButtonCustomizationScreenState
             onPressed: () => Navigator.pop(context, false),
             child: Text(
               'Cancel',
-              style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+              style: AppTextStyles.body.copyWith(
+                color: AppColors.textSecondary,
+              ),
             ),
           ),
           TextButton(
@@ -742,18 +770,10 @@ class _CenterCrosshairPainter extends CustomPainter {
     final centerY = size.height / 2;
 
     // Vertical line
-    canvas.drawLine(
-      Offset(centerX, 0),
-      Offset(centerX, size.height),
-      paint,
-    );
+    canvas.drawLine(Offset(centerX, 0), Offset(centerX, size.height), paint);
 
     // Horizontal line
-    canvas.drawLine(
-      Offset(0, centerY),
-      Offset(size.width, centerY),
-      paint,
-    );
+    canvas.drawLine(Offset(0, centerY), Offset(size.width, centerY), paint);
 
     // Center circle
     canvas.drawCircle(

@@ -11,6 +11,7 @@ import '../widgets/info_card.dart';
 import '../widgets/monospaced_text.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'button_customization_screen.dart';
+import 'survey_data_debug_screen.dart';
 
 /// Settings screen for app configuration
 class SettingsScreen extends StatefulWidget {
@@ -31,7 +32,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     final settings = context.read<Settings>();
     _wheelDiameterController = TextEditingController(
-      text: (settings.wheelDiameter * 1000).toStringAsFixed(1), // Convert m to mm for display
+      text: (settings.wheelDiameter * 1000).toStringAsFixed(
+        1,
+      ), // Convert m to mm for display
     );
     _minPeakThresholdController = TextEditingController(
       text: settings.minPeakThreshold.toStringAsFixed(1),
@@ -39,9 +42,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _maxPeakThresholdController = TextEditingController(
       text: settings.maxPeakThreshold.toStringAsFixed(1),
     );
-    _surveyNameController = TextEditingController(
-      text: settings.surveyName,
-    );
+    _surveyNameController = TextEditingController(text: settings.surveyName);
 
     // Start magnetometer and compass services for live sensor readout
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -111,10 +112,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-      ),
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
     );
   }
 
@@ -222,7 +220,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     controller: _wheelDiameterController,
                     label: 'Diameter (mm)',
                     hint: '43.0',
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -248,14 +248,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     controller: _minPeakThresholdController,
                     label: 'Min Peak Threshold (μT)',
                     hint: '50.0',
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.small),
                   _buildTextField(
                     controller: _maxPeakThresholdController,
                     label: 'Max Peak Threshold (μT)',
                     hint: '200.0',
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -293,7 +297,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const SizedBox(height: 6),
                       _buildSensorRow('Z', magnetometer.magnetometerZ),
                       const Divider(height: 20),
-                      _buildSensorRow('Magnitude', magnetometer.magneticStrength, highlight: true),
+                      _buildSensorRow(
+                        'Magnitude',
+                        magnetometer.magneticStrength,
+                        highlight: true,
+                      ),
                       const SizedBox(height: AppSpacing.small),
                       Text(
                         'Compass',
@@ -305,7 +313,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const SizedBox(height: AppSpacing.small),
                       _buildSensorRow('Heading', compass.heading, suffix: '°'),
                       const SizedBox(height: 6),
-                      _buildSensorRow('Accuracy', compass.accuracy, suffix: '°'),
+                      _buildSensorRow(
+                        'Accuracy',
+                        compass.accuracy,
+                        suffix: '°',
+                      ),
                     ],
                   ),
                 );
@@ -387,7 +399,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const Divider(height: 1),
                       ListTile(
                         contentPadding: EdgeInsets.zero,
-                        leading: Icon(Icons.touch_app, color: AppColors.textPrimary),
+                        leading: Icon(
+                          Icons.touch_app,
+                          color: AppColors.textPrimary,
+                        ),
                         title: Text(
                           'Button Customization',
                           style: AppTextStyles.body.copyWith(
@@ -400,12 +415,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             color: AppColors.textSecondary,
                           ),
                         ),
-                        trailing: Icon(Icons.chevron_right, color: AppColors.textSecondary),
+                        trailing: Icon(
+                          Icons.chevron_right,
+                          color: AppColors.textSecondary,
+                        ),
                         onTap: () {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => const ButtonCustomizationScreen(),
+                              builder: (context) =>
+                                  const ButtonCustomizationScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(
+                          Icons.table_chart,
+                          color: AppColors.textPrimary,
+                        ),
+                        title: Text(
+                          'Debug: Survey Data',
+                          style: AppTextStyles.body.copyWith(
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        subtitle: Text(
+                          'View collected survey data in table format',
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        trailing: Icon(
+                          Icons.chevron_right,
+                          color: AppColors.textSecondary,
+                        ),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  const SurveyDataDebugScreen(),
                             ),
                           );
                         },
@@ -425,15 +477,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.help_outline, color: AppColors.textPrimary),
+                    leading: Icon(
+                      Icons.help_outline,
+                      color: AppColors.textPrimary,
+                    ),
                     title: Text(
                       'Documentation',
                       style: AppTextStyles.body.copyWith(
                         color: AppColors.textPrimary,
                       ),
                     ),
-                    trailing: Icon(Icons.open_in_new, color: AppColors.textSecondary),
-                    onTap: () => _launchURL('https://github.com/f0xdude/CaveDiveMap'),
+                    trailing: Icon(
+                      Icons.open_in_new,
+                      color: AppColors.textSecondary,
+                    ),
+                    onTap: () =>
+                        _launchURL('https://github.com/f0xdude/CaveDiveMap'),
                   ),
                   const Divider(height: 1),
                   ListTile(
@@ -445,20 +504,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         color: AppColors.textPrimary,
                       ),
                     ),
-                    trailing: Icon(Icons.open_in_new, color: AppColors.textSecondary),
-                    onTap: () => _launchURL('https://www.thingiverse.com/thing:6950056'),
+                    trailing: Icon(
+                      Icons.open_in_new,
+                      color: AppColors.textSecondary,
+                    ),
+                    onTap: () =>
+                        _launchURL('https://www.thingiverse.com/thing:6950056'),
                   ),
                   const Divider(height: 1),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.info_outline, color: AppColors.textPrimary),
+                    leading: Icon(
+                      Icons.info_outline,
+                      color: AppColors.textPrimary,
+                    ),
                     title: Text(
                       'About',
                       style: AppTextStyles.body.copyWith(
                         color: AppColors.textPrimary,
                       ),
                     ),
-                    trailing: Icon(Icons.chevron_right, color: AppColors.textSecondary),
+                    trailing: Icon(
+                      Icons.chevron_right,
+                      color: AppColors.textSecondary,
+                    ),
                     onTap: _showAboutDialog,
                   ),
                 ],
@@ -476,7 +545,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   foregroundColor: AppColors.textPrimary,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
-                child: const Text('Save Settings', style: TextStyle(fontSize: 18)),
+                child: const Text(
+                  'Save Settings',
+                  style: TextStyle(fontSize: 18),
+                ),
               ),
             ),
             const SizedBox(height: AppSpacing.large),
@@ -492,9 +564,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not open $url')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not open $url')));
       }
     }
   }
@@ -539,7 +611,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildSensorRow(String label, double value, {String suffix = 'μT', bool highlight = false}) {
+  Widget _buildSensorRow(
+    String label,
+    double value, {
+    String suffix = 'μT',
+    bool highlight = false,
+  }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [

@@ -9,17 +9,12 @@ class InfoCard extends StatelessWidget {
   final Widget child;
   final EdgeInsets? padding;
 
-  const InfoCard({
-    super.key,
-    required this.child,
-    this.padding,
-  });
+  const InfoCard({super.key, required this.child, this.padding});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: padding ??
-          const EdgeInsets.all(AppSpacing.cardPadding),
+      padding: padding ?? const EdgeInsets.all(AppSpacing.cardPadding),
       decoration: BoxDecoration(
         color: AppColors.backgroundCard,
         borderRadius: BorderRadius.circular(AppSpacing.cardRadius),

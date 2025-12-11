@@ -141,8 +141,10 @@ class AppButtonSizes {
   // Icon scaling factors
   static const double iconScaleLarge = 0.35; // 35% of button size for icons
   static const double iconScaleMedium = 0.4; // 40% of button size for icons
-  static const double textScaleSmall = 0.2; // 20% of button size for text labels
-  static const double textScaleMedium = 0.26; // 26% of button size for text labels
+  static const double textScaleSmall =
+      0.2; // 20% of button size for text labels
+  static const double textScaleMedium =
+      0.26; // 26% of button size for text labels
 
   // Default button sizes
   static const double mainScreenDefault = 75.0;

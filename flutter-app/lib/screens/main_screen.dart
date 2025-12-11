@@ -4,6 +4,7 @@ import 'dart:async';
 import '../services/magnetometer_service.dart';
 import '../services/compass_service.dart';
 import '../services/storage_service.dart';
+import '../services/export_service.dart';
 import '../services/button_customization_service.dart';
 import '../widgets/positioned_button.dart';
 import '../widgets/monospaced_text.dart';
@@ -32,8 +33,16 @@ class _MainScreenState extends State<MainScreen> {
     super.initState();
     // Start sensor services when screen loads
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<MagnetometerService>().startListening();
-      context.read<CompassService>().startListening();
+      final magnetometerService = context.read<MagnetometerService>();
+      final compassService = context.read<CompassService>();
+
+      magnetometerService.startListening();
+      compassService.startListening();
+
+      // Update magnetometer heading whenever compass changes
+      compassService.addListener(() {
+        magnetometerService.updateHeading(compassService.heading);
+      });
     });
   }
 
@@ -96,8 +105,8 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void _onResetTapDown() {
-    _resetHoldTimer = Timer(const Duration(seconds: 3), () {
-      _confirmReset();
+    _resetHoldTimer = Timer(const Duration(seconds: 6), () {
+      _performReset();
     });
   }
 
@@ -109,7 +118,7 @@ class _MainScreenState extends State<MainScreen> {
       // Show hint about long-press
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Hold for 3 seconds to reset'),
+          content: Text('Hold for 6 seconds to reset'),
           duration: Duration(seconds: 1),
         ),
       );
@@ -121,43 +130,61 @@ class _MainScreenState extends State<MainScreen> {
     _resetHoldTimer = null;
   }
 
-  Future<void> _confirmReset() async {
+  Future<void> _performReset() async {
     _isResetting = true;
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Reset Survey'),
-        content: const Text(
-          'Are you sure you want to reset all survey data? This cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Reset'),
-          ),
-        ],
-      ),
-    );
+    final storageService = context.read<StorageService>();
+    final exportService = context.read<ExportService>();
+    final magnetometerService = context.read<MagnetometerService>();
 
-    if (confirmed == true && mounted) {
-      final storageService = context.read<StorageService>();
-      await storageService.clearAllData();
-      context.read<MagnetometerService>().reset();
+    // Get current survey data
+    final surveyData = await storageService.getAllSurveyData();
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Data reset successfully'),
-            backgroundColor: Colors.green,
-          ),
-        );
+    // Export data before reset if there is any
+    String? exportedPath;
+    if (surveyData.isNotEmpty) {
+      try {
+        final timestamp = DateTime.now();
+        final fileName =
+            'cave_survey_backup_'
+            '${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')}_'
+            '${timestamp.hour.toString().padLeft(2, '0')}-${timestamp.minute.toString().padLeft(2, '0')}-${timestamp.second.toString().padLeft(2, '0')}'
+            '.csv';
+
+        final file = await exportService.exportToCSV(surveyData, fileName);
+        exportedPath = file.path;
+      } catch (e) {
+        // Show error but continue with reset
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Export failed: $e'),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
       }
+    }
+
+    // Clear all data
+    await storageService.clearAllData();
+    magnetometerService.reset();
+
+    if (mounted) {
+      final message = exportedPath != null
+          ? 'Data exported and reset successfully\nBackup: $exportedPath'
+          : surveyData.isEmpty
+          ? 'No data to export - reset complete'
+          : 'Data reset successfully (export failed)';
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
 
     _isResetting = false;
@@ -192,99 +219,110 @@ class _MainScreenState extends State<MainScreen> {
           tooltip: 'Settings',
         ),
       ),
-      body: Consumer3<MagnetometerService, CompassService, ButtonCustomizationService>(
-        builder: (context, magnetometer, compass, buttonService, child) {
-          return Stack(
-            children: [
-              // Main sensor data display
-              SafeArea(
-                child: Padding(
-                  padding: AppSpacing.screenPadding,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Heading with large typography
-                      _buildLargeDataRow(
-                        'Heading',
-                        '${compass.heading.toStringAsFixed(1)}°',
-                        AppTextStyles.largeTitle,
+      body:
+          Consumer3<
+            MagnetometerService,
+            CompassService,
+            ButtonCustomizationService
+          >(
+            builder: (context, magnetometer, compass, buttonService, child) {
+              return Stack(
+                children: [
+                  // Main sensor data display
+                  SafeArea(
+                    child: Padding(
+                      padding: AppSpacing.screenPadding,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Heading with large typography
+                          _buildLargeDataRow(
+                            'Heading',
+                            '${compass.heading.toStringAsFixed(1)}°',
+                            AppTextStyles.largeTitle,
+                          ),
+                          const SizedBox(height: 4),
+
+                          // Heading accuracy indicator
+                          HeadingAccuracyIndicator(accuracy: compass.accuracy),
+                          const SizedBox(height: AppSpacing.small),
+
+                          // Distance with large typography
+                          _buildLargeDataRow(
+                            'Distance',
+                            '${magnetometer.totalDistance.toStringAsFixed(2)} m',
+                            AppTextStyles.largeTitle,
+                          ),
+                          const SizedBox(height: AppSpacing.small),
+
+                          // Point number (smaller text)
+                          _buildLargeDataRow(
+                            'Points',
+                            context
+                                .watch<StorageService>()
+                                .surveyPoints
+                                .length
+                                .toString(),
+                            AppTextStyles.body,
+                          ),
+                          const SizedBox(height: AppSpacing.small),
+
+                          // Magnetic strength indicator
+                          _buildMagneticStrengthIndicator(
+                            magnetometer.magneticStrength,
+                          ),
+
+                          // Spacer to push buttons to bottom
+                          const Spacer(),
+                        ],
                       ),
-                      const SizedBox(height: 4),
-
-                      // Heading accuracy indicator
-                      HeadingAccuracyIndicator(accuracy: compass.accuracy),
-                      const SizedBox(height: AppSpacing.small),
-
-                      // Distance with large typography
-                      _buildLargeDataRow(
-                        'Distance',
-                        '${magnetometer.totalDistance.toStringAsFixed(2)} m',
-                        AppTextStyles.largeTitle,
-                      ),
-                      const SizedBox(height: AppSpacing.small),
-
-                      // Point number (smaller text)
-                      _buildLargeDataRow(
-                        'Points',
-                        magnetometer.currentPointNumber.toString(),
-                        AppTextStyles.body,
-                      ),
-                      const SizedBox(height: AppSpacing.small),
-
-                      // Magnetic strength indicator
-                      _buildMagneticStrengthIndicator(magnetometer.magneticStrength),
-
-                      // Spacer to push buttons to bottom
-                      const Spacer(),
-                    ],
+                    ),
                   ),
-                ),
-              ),
 
-              // Circular action buttons positioned via ButtonConfig
-              PositionedButton(
-                config: buttonService.mainSaveButton,
-                onPressed: _navigateToSaveData,
-                icon: Icons.save,
-                label: 'Save',
-                color: AppColors.actionSave,
-              ),
+                  // Circular action buttons positioned via ButtonConfig
+                  PositionedButton(
+                    config: buttonService.mainSaveButton,
+                    onPressed: _navigateToSaveData,
+                    icon: Icons.save,
+                    label: 'Save',
+                    color: AppColors.actionSave,
+                  ),
 
-              PositionedButton(
-                config: buttonService.mainMapButton,
-                onPressed: _navigateToMap,
-                icon: Icons.map,
-                label: 'Map',
-                color: AppColors.actionMap,
-              ),
+                  PositionedButton(
+                    config: buttonService.mainMapButton,
+                    onPressed: _navigateToMap,
+                    icon: Icons.map,
+                    label: 'Map',
+                    color: AppColors.actionMap,
+                  ),
 
-              PositionedButton(
-                config: buttonService.mainResetButton,
-                onTapDown: (_) => _onResetTapDown(),
-                onTapUp: (_) => _onResetTapUp(),
-                onTapCancel: _onResetTapCancel,
-                icon: Icons.refresh,
-                label: 'Reset',
-                color: AppColors.actionReset,
-              ),
+                  PositionedButton(
+                    config: buttonService.mainResetButton,
+                    onTapDown: (_) => _onResetTapDown(),
+                    onTapUp: (_) => _onResetTapUp(),
+                    onTapCancel: _onResetTapCancel,
+                    icon: Icons.refresh,
+                    label: 'Reset',
+                    color: AppColors.actionReset,
+                  ),
 
-              PositionedButton(
-                config: buttonService.mainCameraButton,
-                onPressed: _showCameraNotImplemented,
-                icon: Icons.camera_alt,
-                label: 'Photo',
-                color: AppColors.actionSecondary,
-              ),
+                  PositionedButton(
+                    config: buttonService.mainCameraButton,
+                    onPressed: _showCameraNotImplemented,
+                    icon: Icons.camera_alt,
+                    label: 'Photo',
+                    color: AppColors.actionSecondary,
+                  ),
 
-              // Calibration toast overlay
-              if (_showCalibrationToast)
-                CalibrationToast(
-                  message: 'Move device in figure-8 to calibrate compass',
-                ),
-            ],
-          );
-        },
-      ),
+                  // Calibration toast overlay
+                  if (_showCalibrationToast)
+                    CalibrationToast(
+                      message: 'Move device in figure-8 to calibrate compass',
+                    ),
+                ],
+              );
+            },
+          ),
     );
   }
 
@@ -294,16 +332,12 @@ class _MainScreenState extends State<MainScreen> {
       children: [
         Text(
           label,
-          style: AppTextStyles.body.copyWith(
-            color: AppColors.textSecondary,
-          ),
+          style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
         ),
         const SizedBox(height: 4),
         MonospacedText(
           value,
-          style: valueStyle.copyWith(
-            color: AppColors.textPrimary,
-          ),
+          style: valueStyle.copyWith(color: AppColors.textPrimary),
         ),
       ],
     );
@@ -327,9 +361,7 @@ class _MainScreenState extends State<MainScreen> {
       children: [
         Text(
           'Magnetic Field',
-          style: AppTextStyles.caption.copyWith(
-            color: AppColors.textSecondary,
-          ),
+          style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
         ),
         const SizedBox(height: 8),
         SizedBox(
@@ -344,9 +376,7 @@ class _MainScreenState extends State<MainScreen> {
         const SizedBox(height: 4),
         Text(
           '${strength.toStringAsFixed(1)} μT',
-          style: AppTextStyles.caption.copyWith(
-            color: AppColors.textSecondary,
-          ),
+          style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
         ),
       ],
     );

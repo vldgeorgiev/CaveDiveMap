@@ -1,15 +1,15 @@
 /// Survey data point model matching Swift SavedData struct
 class SurveyData {
-  final int recordNumber;     // Sequential point ID
-  final double distance;      // Cumulative meters from start
-  final double heading;       // Magnetic degrees (0-360)
-  final double depth;         // Meters (manually adjusted)
-  final double left;          // Passage width left (manual points only)
-  final double right;         // Passage width right
-  final double up;            // Passage height up
-  final double down;          // Passage height down
-  final String rtype;         // "auto" or "manual"
-  final DateTime timestamp;   // When point was recorded
+  final int recordNumber; // Sequential point ID
+  final double distance; // Cumulative meters from start
+  final double heading; // Magnetic degrees (0-360)
+  final double depth; // Meters (manually adjusted)
+  final double left; // Passage width left (manual points only)
+  final double right; // Passage width right
+  final double up; // Passage height up
+  final double down; // Passage height down
+  final String rtype; // "auto" or "manual"
+  final DateTime timestamp; // When point was recorded
 
   const SurveyData({
     required this.recordNumber,

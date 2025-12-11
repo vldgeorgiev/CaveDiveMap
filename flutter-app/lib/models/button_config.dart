@@ -21,11 +21,7 @@ class ButtonConfig {
   });
 
   /// Create a copy with optional parameter overrides
-  ButtonConfig copyWith({
-    double? size,
-    double? offsetX,
-    double? offsetY,
-  }) {
+  ButtonConfig copyWith({double? size, double? offsetX, double? offsetY}) {
     return ButtonConfig(
       size: size ?? this.size,
       offsetX: offsetX ?? this.offsetX,
@@ -35,11 +31,7 @@ class ButtonConfig {
 
   /// Convert to JSON for persistence
   Map<String, dynamic> toJson() {
-    return {
-      'size': size,
-      'offsetX': offsetX,
-      'offsetY': offsetY,
-    };
+    return {'size': size, 'offsetX': offsetX, 'offsetY': offsetY};
   }
 
   /// Create from JSON

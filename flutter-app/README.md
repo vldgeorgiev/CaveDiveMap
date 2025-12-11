@@ -11,9 +11,13 @@ CaveDiveMap is a cross-platform rewrite of the iOS-only CaveDiveMap application.
 ## Features
 
 - **Magnetometer-based Distance Measurement**: 3D-printed wheel with magnet rotates as diver moves along guideline
-- **Compass Heading**: Magnetic heading from phone sensors
+- **Automatic Point Collection**: Auto-saves survey points every 10 wheel rotations (2.63m)
+- **Compass Heading**: Magnetic heading from phone sensors (saved with auto-points)
 - **Manual Depth Control**: Adjustable via waterproof case buttons
-- **Data Export**: CSV and Therion cave survey formats
+- **Data Persistence**: Survey data automatically saved and persists across app restarts
+- **Data Export**: CSV and Therion cave survey formats (saved to Documents/CaveDiveMap)
+- **Reset Workflow**: 10-second hold to reset with automatic backup export
+- **Debug Screen**: Table view of all survey points for data verification
 - **Live Visualization**: 2D map view during dives
 - **Cross-Platform**: Works on both iOS and Android
 
@@ -64,9 +68,62 @@ lib/
 ### Tech Stack
 
 - **State Management**: Provider (ChangeNotifier pattern)
-- **Storage**: Hive (NoSQL key-value database)
+- **Storage**: Hive (NoSQL key-value database with automatic persistence)
 - **Sensors**: sensors_plus, flutter_compass
 - **Export**: share_plus, path_provider
+
+## Usage
+
+### Data Collection
+
+1. **Start Recording**: Tap "Start Recording" on main screen
+2. **Auto Points**: System automatically saves survey points every 10 wheel rotations (2.63m)
+   - Includes distance, compass heading, and depth
+   - Point counter increments automatically
+3. **Manual Points**: Navigate to "Save Data" screen to add manual measurements
+   - Enter left, right, up, down dimensions
+   - Manual points include all auto-point data plus dimensions
+4. **Data Persistence**: All survey data is automatically saved and persists across app restarts
+
+### Resetting Survey Data
+
+To start a new survey:
+
+1. **Hold Reset Button**: Press and hold the reset button for **10 seconds**
+2. **Automatic Backup**: System automatically exports current data to CSV before clearing
+   - Backup saved to: `Documents/CaveDiveMap/cave_survey_backup_YYYY-MM-DD_HH-mm-ss.csv`
+   - Export path shown in notification for 3 seconds
+3. **Data Cleared**: All survey points are removed after successful backup
+
+**Note**: No confirmation dialog is shown - the 10-second hold is the safety mechanism.
+
+### Exporting Data
+
+Export files are saved to accessible locations:
+
+- **Android**: `/storage/emulated/0/Documents/CaveDiveMap/`
+  - Accessible via Files app or any file manager
+  - Requires storage permission on Android 12 and below
+- **iOS**: `Documents/CaveDiveMap/`
+  - Accessible via Files app
+
+Export formats:
+- **CSV**: Standard format with all survey point data
+- **Therion**: Cave survey software format (.th files)
+
+After export, the file path is displayed in a notification for 3 seconds.
+
+### Debug Screen
+
+To view all collected survey data:
+
+1. Open **Settings**
+2. Tap **Debug: Survey Data** (under Interface section)
+3. View table with all survey points:
+   - Record #, Distance, Azimuth, Depth
+   - Left, Right, Up, Down dimensions
+   - Point type (auto/manual)
+   - Color-coded rows by type
 
 ## Data Migration from iOS App
 

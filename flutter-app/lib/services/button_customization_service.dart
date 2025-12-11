@@ -15,8 +15,10 @@ class ButtonCustomizationService extends ChangeNotifier {
 
   // Save Data View button configs
   ButtonConfig _saveDataSaveButton = ButtonConfig.defaultSaveDataSave();
-  ButtonConfig _saveDataIncrementButton = ButtonConfig.defaultSaveDataIncrement();
-  ButtonConfig _saveDataDecrementButton = ButtonConfig.defaultSaveDataDecrement();
+  ButtonConfig _saveDataIncrementButton =
+      ButtonConfig.defaultSaveDataIncrement();
+  ButtonConfig _saveDataDecrementButton =
+      ButtonConfig.defaultSaveDataDecrement();
   ButtonConfig _saveDataCycleButton = ButtonConfig.defaultSaveDataCycle();
 
   bool _isLoaded = false;
@@ -44,24 +46,30 @@ class ButtonCustomizationService extends ChangeNotifier {
   /// Load all button configurations from storage
   Future<void> loadSettings() async {
     // Load saved configs or use defaults
-    _mainSaveButton = await _storage.loadButtonConfig('main_save') ??
+    _mainSaveButton =
+        await _storage.loadButtonConfig('main_save') ??
         ButtonConfig.defaultMainSave();
-    _mainMapButton = await _storage.loadButtonConfig('main_map') ??
+    _mainMapButton =
+        await _storage.loadButtonConfig('main_map') ??
         ButtonConfig.defaultMainMap();
-    _mainResetButton = await _storage.loadButtonConfig('main_reset') ??
+    _mainResetButton =
+        await _storage.loadButtonConfig('main_reset') ??
         ButtonConfig.defaultMainReset();
-    _mainCameraButton = await _storage.loadButtonConfig('main_camera') ??
+    _mainCameraButton =
+        await _storage.loadButtonConfig('main_camera') ??
         ButtonConfig.defaultMainCamera();
 
-    _saveDataSaveButton = await _storage.loadButtonConfig('save_data_save') ??
+    _saveDataSaveButton =
+        await _storage.loadButtonConfig('save_data_save') ??
         ButtonConfig.defaultSaveDataSave();
     _saveDataIncrementButton =
         await _storage.loadButtonConfig('save_data_increment') ??
-            ButtonConfig.defaultSaveDataIncrement();
+        ButtonConfig.defaultSaveDataIncrement();
     _saveDataDecrementButton =
         await _storage.loadButtonConfig('save_data_decrement') ??
-            ButtonConfig.defaultSaveDataDecrement();
-    _saveDataCycleButton = await _storage.loadButtonConfig('save_data_cycle') ??
+        ButtonConfig.defaultSaveDataDecrement();
+    _saveDataCycleButton =
+        await _storage.loadButtonConfig('save_data_cycle') ??
         ButtonConfig.defaultSaveDataCycle();
 
     // Migrate old button positions to new defaults if they match old values
@@ -181,8 +189,14 @@ class ButtonCustomizationService extends ChangeNotifier {
       _storage.saveButtonConfig('main_reset', _mainResetButton),
       _storage.saveButtonConfig('main_camera', _mainCameraButton),
       _storage.saveButtonConfig('save_data_save', _saveDataSaveButton),
-      _storage.saveButtonConfig('save_data_increment', _saveDataIncrementButton),
-      _storage.saveButtonConfig('save_data_decrement', _saveDataDecrementButton),
+      _storage.saveButtonConfig(
+        'save_data_increment',
+        _saveDataIncrementButton,
+      ),
+      _storage.saveButtonConfig(
+        'save_data_decrement',
+        _saveDataDecrementButton,
+      ),
       _storage.saveButtonConfig('save_data_cycle', _saveDataCycleButton),
     ]);
 

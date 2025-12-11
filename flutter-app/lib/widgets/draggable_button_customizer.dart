@@ -34,8 +34,7 @@ class DraggableButtonCustomizer extends StatefulWidget {
       _DraggableButtonCustomizerState();
 }
 
-class _DraggableButtonCustomizerState
-    extends State<DraggableButtonCustomizer> {
+class _DraggableButtonCustomizerState extends State<DraggableButtonCustomizer> {
   late Offset _currentPosition;
   bool _isDragging = false;
 
@@ -97,10 +96,9 @@ class _DraggableButtonCustomizerState
     );
 
     // Update the config
-    widget.onConfigChanged(widget.config.copyWith(
-      offsetX: clampedOffsetX,
-      offsetY: clampedOffsetY,
-    ));
+    widget.onConfigChanged(
+      widget.config.copyWith(offsetX: clampedOffsetX, offsetY: clampedOffsetY),
+    );
   }
 
   @override
@@ -125,10 +123,7 @@ class _DraggableButtonCustomizerState
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: widget.isSelected
-                      ? Border.all(
-                          color: AppColors.dataPrimary,
-                          width: 3,
-                        )
+                      ? Border.all(color: AppColors.dataPrimary, width: 3)
                       : null,
                   boxShadow: [
                     if (_isDragging)

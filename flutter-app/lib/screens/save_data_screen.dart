@@ -4,7 +4,6 @@ import 'dart:async';
 import '../models/survey_data.dart';
 import '../services/storage_service.dart';
 import '../services/magnetometer_service.dart';
-import '../services/compass_service.dart';
 import '../services/button_customization_service.dart';
 import '../widgets/positioned_button.dart';
 import '../widgets/info_card.dart';
@@ -213,8 +212,8 @@ class _SaveDataScreenState extends State<SaveDataScreen> {
     final manualPoint = SurveyData(
       recordNumber: magnetometerService.currentPointNumber + 1,
       distance: magnetometerService.totalDistance,
-      heading: widget.capturedHeading,  // Use static captured heading
-      depth: _depth,  // Use manually entered depth
+      heading: widget.capturedHeading, // Use static captured heading
+      depth: _depth, // Use manually entered depth
       left: _left,
       right: _right,
       up: _up,
@@ -368,9 +367,7 @@ class _SaveDataScreenState extends State<SaveDataScreen> {
       children: [
         Text(
           label,
-          style: AppTextStyles.body.copyWith(
-            color: AppColors.textSecondary,
-          ),
+          style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
         ),
         MonospacedText(
           value,

@@ -15,11 +15,11 @@ class Settings extends ChangeNotifier {
     double maxPeakThreshold = 100.0,
     String surveyName = 'Unnamed Survey',
     bool keepScreenOn = true, // Default: keep screen on during surveys
-  })  : _wheelDiameter = wheelDiameter,
-        _minPeakThreshold = minPeakThreshold,
-        _maxPeakThreshold = maxPeakThreshold,
-        _surveyName = surveyName,
-        _keepScreenOn = keepScreenOn;
+  }) : _wheelDiameter = wheelDiameter,
+       _minPeakThreshold = minPeakThreshold,
+       _maxPeakThreshold = maxPeakThreshold,
+       _surveyName = surveyName,
+       _keepScreenOn = keepScreenOn;
 
   // Getters
   double get wheelDiameter => _wheelDiameter;

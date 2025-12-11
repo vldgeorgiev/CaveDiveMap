@@ -5,6 +5,18 @@ import '../models/settings.dart';
 import '../models/button_config.dart';
 
 /// Storage service for survey data and app settings using Hive
+///
+/// **Persistence Guarantees:**
+/// - Survey data persists automatically across app restarts
+/// - Hive stores data on disk and reloads it on `initialize()`
+/// - Data survives app termination, device restart, and app updates
+/// - No manual save/flush required - Hive handles persistence automatically
+///
+/// **Data Lifecycle:**
+/// 1. App startup → `initialize()` → Hive opens boxes
+/// 2. `_loadSurveyData()` → loads all persisted survey points
+/// 3. `_loadPointCounter()` → restores point counter state
+/// 4. Survey continues from last state seamlessly
 class StorageService extends ChangeNotifier {
   static const String _surveyBoxName = 'survey_data';
   static const String _settingsBoxName = 'app_settings';
@@ -24,6 +36,9 @@ class StorageService extends ChangeNotifier {
   int get nextPointNumber => _pointCounter;
 
   /// Initialize Hive and open boxes
+  ///
+  /// Opens persistent Hive boxes and loads all existing data.
+  /// Survey data automatically persists across app restarts.
   Future<void> initialize() async {
     await Hive.initFlutter();
 
@@ -32,11 +47,12 @@ class StorageService extends ChangeNotifier {
       Hive.registerAdapter(ButtonConfigAdapter());
     }
 
+    // Open persistent boxes (data survives app restarts)
     _surveyBox = await Hive.openBox<Map>(_surveyBoxName);
     _settingsBox = await Hive.openBox(_settingsBoxName);
     _buttonSettingsBox = await Hive.openBox(_buttonSettingsBoxName);
 
-    // Load existing data
+    // Load existing data from disk
     await _loadSurveyData();
     await _loadPointCounter();
   }
@@ -84,7 +100,9 @@ class StorageService extends ChangeNotifier {
 
     await _surveyBox!.put(point.recordNumber, point.toJson());
 
-    final index = _surveyPoints.indexWhere((p) => p.recordNumber == point.recordNumber);
+    final index = _surveyPoints.indexWhere(
+      (p) => p.recordNumber == point.recordNumber,
+    );
     if (index != -1) {
       _surveyPoints[index] = point;
       notifyListeners();

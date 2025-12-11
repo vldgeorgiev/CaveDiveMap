@@ -8,10 +8,7 @@ import '../utils/theme_extensions.dart';
 class CompassOverlay extends StatelessWidget {
   final double mapRotation; // Map rotation in radians
 
-  const CompassOverlay({
-    super.key,
-    required this.mapRotation,
-  });
+  const CompassOverlay({super.key, required this.mapRotation});
 
   @override
   Widget build(BuildContext context) {
@@ -28,11 +25,7 @@ class CompassOverlay extends StatelessWidget {
         child: Center(
           child: Transform.rotate(
             angle: -mapRotation, // Rotate opposite to map
-            child: const Icon(
-              Icons.navigation,
-              color: Colors.white,
-              size: 32,
-            ),
+            child: const Icon(Icons.navigation, color: Colors.white, size: 32),
           ),
         ),
       ),

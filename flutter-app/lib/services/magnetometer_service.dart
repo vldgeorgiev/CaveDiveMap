@@ -5,8 +5,17 @@ import 'package:sensors_plus/sensors_plus.dart';
 import '../models/survey_data.dart';
 import 'storage_service.dart';
 
-/// Service for magnetometer-based distance measurement
+/// Service for magnetometer-based distance measurement.
+///
 /// Detects wheel rotations by identifying peaks in magnetic field strength
+/// when a magnet passes the sensor. Uses dual-threshold peak detection to
+/// avoid false triggers from noise.
+///
+/// Key features:
+/// - Cumulative distance tracking across sessions
+/// - Auto-point creation every 10 rotations (2.63m)
+/// - Point counter syncs with persisted storage
+/// - Distance persists across app restarts
 class MagnetometerService extends ChangeNotifier {
   final StorageService _storageService;
 
@@ -27,9 +36,9 @@ class MagnetometerService extends ChangeNotifier {
 
   // Settings
   double _wheelCircumference = 0.263; // meters
-  double _minPeakThreshold = 50.0;    // μT - must drop below this to reset
-  double _maxPeakThreshold = 100.0;   // μT - must exceed this to trigger peak
-  bool _isReadyForNewPeak = true;     // State tracker for peak detection
+  double _minPeakThreshold = 50.0; // μT - must drop below this to reset
+  double _maxPeakThreshold = 100.0; // μT - must exceed this to trigger peak
+  bool _isReadyForNewPeak = true; // State tracker for peak detection
   int _rotationCount = 0;
 
   // Performance optimization
@@ -45,7 +54,16 @@ class MagnetometerService extends ChangeNotifier {
   DateTime? _lastRotationTime;
   double _averageRotationInterval = 0.0;
 
-  MagnetometerService(this._storageService);
+  MagnetometerService(this._storageService) {
+    // Initialize point counter from persisted data to maintain continuity
+    _currentPointNumber = _storageService.surveyPoints.length;
+
+    // Initialize distance from last saved point for cumulative tracking
+    // This ensures distance continues from where it left off after app restart
+    if (_storageService.surveyPoints.isNotEmpty) {
+      _currentDistance = _storageService.surveyPoints.last.distance;
+    }
+  }
 
   // Getters
   bool get isRecording => _isRecording;
@@ -61,11 +79,14 @@ class MagnetometerService extends ChangeNotifier {
   double get magnetometerZ => _magnetometerZ;
 
   /// Start magnetometer recording
-  void startRecording({double initialDepth = 0.0, double initialHeading = 0.0}) {
+  void startRecording({
+    double initialDepth = 0.0,
+    double initialHeading = 0.0,
+  }) {
     if (_isRecording) return;
 
     _isRecording = true;
-    _currentDistance = 0.0;
+    // Don't reset _currentDistance - it should be cumulative
     _currentDepth = initialDepth;
     _currentHeading = initialHeading;
     _rotationCount = 0;
@@ -89,12 +110,16 @@ class MagnetometerService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Reset measurement (new survey)
+  /// Reset measurement state for new survey.
+  ///
+  /// Clears all distance, depth, and heading data.
+  /// Resets point counter to 0 (should be called after storage is cleared).
   void reset() {
     stopRecording();
     _currentDistance = 0.0;
     _currentDepth = 0.0;
     _currentHeading = 0.0;
+    _currentPointNumber = 0;
     _rotationCount = 0;
     _lastRotationTime = null;
     _averageRotationInterval = 0.0;
@@ -126,7 +151,8 @@ class MagnetometerService extends ChangeNotifier {
     required double minPeakThreshold,
     required double maxPeakThreshold,
   }) {
-    _wheelCircumference = wheelCircumference; // Circumference passed in (pre-calculated)
+    _wheelCircumference =
+        wheelCircumference; // Circumference passed in (pre-calculated)
     _minPeakThreshold = minPeakThreshold;
     _maxPeakThreshold = maxPeakThreshold;
     notifyListeners();
@@ -169,9 +195,7 @@ class MagnetometerService extends ChangeNotifier {
 
     // Calculate magnetic field magnitude
     final magnitude = sqrt(
-      event.x * event.x +
-      event.y * event.y +
-      event.z * event.z
+      event.x * event.x + event.y * event.y + event.z * event.z,
     );
 
     _magneticStrength = magnitude;
@@ -220,19 +244,21 @@ class MagnetometerService extends ChangeNotifier {
     // Update rotation timing statistics
     final now = DateTime.now();
     if (_lastRotationTime != null) {
-      final interval = now.difference(_lastRotationTime!).inMilliseconds / 1000.0;
+      final interval =
+          now.difference(_lastRotationTime!).inMilliseconds / 1000.0;
 
       // Exponential moving average for smoother interval
       if (_averageRotationInterval == 0.0) {
         _averageRotationInterval = interval;
       } else {
-        _averageRotationInterval = 0.7 * _averageRotationInterval + 0.3 * interval;
+        _averageRotationInterval =
+            0.7 * _averageRotationInterval + 0.3 * interval;
       }
     }
     _lastRotationTime = now;
 
-    // Calculate new distance
-    _currentDistance = _rotationCount * _wheelCircumference;
+    // Calculate new distance (add to existing distance)
+    _currentDistance += _wheelCircumference;
     _currentPointNumber++;
 
     // Auto-save survey point
