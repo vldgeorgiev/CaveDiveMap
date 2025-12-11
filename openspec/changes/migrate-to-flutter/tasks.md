@@ -32,8 +32,8 @@
 - [x] Set up project structure (lib/models, lib/services, lib/screens, lib/widgets)
 - [x] Add dependencies to pubspec.yaml (sensors_plus 7.0.0, flutter_compass 0.8.1, hive 2.2.3, provider 6.1.5, share_plus)
 - [ ] Configure app icons and splash screens for both platforms
-- [ ] Set up code signing for iOS (new bundle ID, different from Swift app)
-- [ ] Configure Android build.gradle with unique application ID
+- [x] Set up code signing for iOS (new bundle ID: com.cavedivemap.flutter, different from Swift app's CaveDiveMap)
+- [x] Configure Android build.gradle with unique application ID (com.cavedivemap.flutter)
 - [ ] Update app name to distinguish from Swift version during transition (e.g., "CaveDiveMap 2.0" or "CaveDiveMap Flutter")
 
 ### Data Models
