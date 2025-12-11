@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'models/settings.dart';
 import 'services/storage_service.dart';
 import 'services/magnetometer_service.dart';
@@ -11,6 +13,11 @@ import 'utils/theme_extensions.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Enable fullscreen mode (hide all system UI)
+  SystemChrome.setEnabledSystemUIMode(
+    SystemUiMode.immersiveSticky,
+  );
 
   // Disable Provider type checking for non-Listenable services
   Provider.debugCheckInvalidValueType = null;
@@ -26,6 +33,11 @@ void main() async {
   final buttonCustomizationService =
       ButtonCustomizationService(storageService);
   await buttonCustomizationService.loadSettings();
+
+  // Apply wakelock based on settings
+  if (settings.keepScreenOn) {
+    WakelockPlus.enable();
+  }
 
   runApp(CaveDiveMapApp(
     storageService: storageService,

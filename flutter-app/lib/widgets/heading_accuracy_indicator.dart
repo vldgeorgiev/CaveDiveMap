@@ -25,7 +25,7 @@ class HeadingAccuracyIndicator extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(
-          'Heading error: ${(accuracy - 10).toStringAsFixed(2)}',
+          'Heading error: ${accuracy.toStringAsFixed(2)}',
           style: AppTextStyles.largeTitle.copyWith(
             fontSize: 28,
           ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../models/settings.dart';
 import '../services/storage_service.dart';
 import '../services/export_service.dart';
@@ -349,32 +350,70 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // Button Customization Section
             _buildSectionHeader('Interface'),
             const SizedBox(height: AppSpacing.small),
-            InfoCard(
-              child: ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.touch_app, color: AppColors.textPrimary),
-                title: Text(
-                  'Button Customization',
-                  style: AppTextStyles.body.copyWith(
-                    color: AppColors.textPrimary,
+            Consumer<Settings>(
+              builder: (context, settings, child) {
+                return InfoCard(
+                  child: Column(
+                    children: [
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          'Keep Screen On',
+                          style: AppTextStyles.body.copyWith(
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        subtitle: Text(
+                          'Prevent screen from dimming or locking during surveys',
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        value: settings.keepScreenOn,
+                        activeColor: AppColors.actionSave,
+                        onChanged: (value) async {
+                          settings.updateKeepScreenOn(value);
+                          final storageService = context.read<StorageService>();
+                          await storageService.saveSettings(settings);
+
+                          // Apply wakelock immediately
+                          if (value) {
+                            WakelockPlus.enable();
+                          } else {
+                            WakelockPlus.disable();
+                          }
+                        },
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.touch_app, color: AppColors.textPrimary),
+                        title: Text(
+                          'Button Customization',
+                          style: AppTextStyles.body.copyWith(
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        subtitle: Text(
+                          'Adjust button size and position',
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        trailing: Icon(Icons.chevron_right, color: AppColors.textSecondary),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const ButtonCustomizationScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                ),
-                subtitle: Text(
-                  'Adjust button size and position',
-                  style: AppTextStyles.caption.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                trailing: Icon(Icons.chevron_right, color: AppColors.textSecondary),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const ButtonCustomizationScreen(),
-                    ),
-                  );
-                },
-              ),
+                );
+              },
             ),
             const SizedBox(height: AppSpacing.medium),
 
