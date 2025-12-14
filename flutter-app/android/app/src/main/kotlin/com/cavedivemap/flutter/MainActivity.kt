@@ -1,4 +1,4 @@
-package com.cavedivemap.cavedivemap_flutter
+package com.cavedivemap.flutter
 
 import io.flutter.embedding.android.FlutterActivity
 
