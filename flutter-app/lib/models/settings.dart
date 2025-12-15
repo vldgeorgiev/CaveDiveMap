@@ -13,7 +13,7 @@ class Settings extends ChangeNotifier {
     double wheelDiameter = 0.043, // Default 43mm diameter wheel
     double minPeakThreshold = 50.0,
     double maxPeakThreshold = 100.0,
-    String surveyName = 'Unnamed Survey',
+    String surveyName = 'survey',
     bool keepScreenOn = true, // Default: keep screen on during surveys
   }) : _wheelDiameter = wheelDiameter,
        _minPeakThreshold = minPeakThreshold,
@@ -83,7 +83,7 @@ class Settings extends ChangeNotifier {
       wheelDiameter: diameter,
       minPeakThreshold: json['minPeakThreshold'] as double? ?? 50.0,
       maxPeakThreshold: json['maxPeakThreshold'] as double? ?? 100.0,
-      surveyName: json['surveyName'] as String? ?? 'Unnamed Survey',
+      surveyName: json['surveyName'] as String? ?? 'survey',
       keepScreenOn: json['keepScreenOn'] as bool? ?? true,
     );
   }

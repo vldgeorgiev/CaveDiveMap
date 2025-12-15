@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/survey_data.dart';
+import '../models/settings.dart';
 import '../services/storage_service.dart';
 import '../services/export_service.dart';
 import '../utils/theme_extensions.dart';
@@ -414,7 +415,16 @@ class _MapScreenState extends State<MapScreen> {
                 ),
               ],
             ),
-            child: const Icon(Icons.upload_file, color: Colors.white, size: 28),
+            child: const Center(
+              child: Text(
+                'csv',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 16),
@@ -435,7 +445,16 @@ class _MapScreenState extends State<MapScreen> {
                 ),
               ],
             ),
-            child: const Icon(Icons.description, color: Colors.white, size: 28),
+            child: const Center(
+              child: Text(
+                'th',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
           ),
         ),
       ],
@@ -446,6 +465,7 @@ class _MapScreenState extends State<MapScreen> {
     try {
       final storageService = context.read<StorageService>();
       final exportService = context.read<ExportService>();
+      final settings = context.read<Settings>();
       final surveyData = await storageService.getAllSurveyData();
 
       if (surveyData.isEmpty) {
@@ -464,17 +484,22 @@ class _MapScreenState extends State<MapScreen> {
         return;
       }
 
+      final timestamp = DateTime.now();
       final fileName =
-          'cave_survey_${DateTime.now().millisecondsSinceEpoch ~/ 1000}';
-      final file = await exportService.exportAndShareCSV(surveyData, fileName);
+          '${settings.surveyName}_'
+          '${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')}_'
+          '${timestamp.hour.toString().padLeft(2, '0')}-${timestamp.minute.toString().padLeft(2, '0')}-${timestamp.second.toString().padLeft(2, '0')}'
+          '.csv';
+      final file = await exportService.exportToCSV(surveyData, fileName);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'CSV exported successfully\n${_truncatePath(file.path)}',
+              file.path,
               style: AppTextStyles.body.copyWith(
                 color: Colors.white,
                 fontFamily: 'monospace',
+                fontSize: 11,
               ),
             ),
             backgroundColor: AppColors.actionExportCSV,
@@ -502,6 +527,7 @@ class _MapScreenState extends State<MapScreen> {
     try {
       final storageService = context.read<StorageService>();
       final exportService = context.read<ExportService>();
+      final settings = context.read<Settings>();
       final surveyData = await storageService.getAllSurveyData();
 
       if (surveyData.isEmpty) {
@@ -520,9 +546,12 @@ class _MapScreenState extends State<MapScreen> {
         return;
       }
 
+      final timestamp = DateTime.now();
       final surveyName =
-          'cave_survey_${DateTime.now().millisecondsSinceEpoch ~/ 1000}';
-      final file = await exportService.exportAndShareTherion(
+          '${settings.surveyName}_'
+          '${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')}_'
+          '${timestamp.hour.toString().padLeft(2, '0')}-${timestamp.minute.toString().padLeft(2, '0')}-${timestamp.second.toString().padLeft(2, '0')}';
+      final file = await exportService.exportToTherion(
         surveyData,
         surveyName,
       );
@@ -530,10 +559,11 @@ class _MapScreenState extends State<MapScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Therion file exported successfully\n${_truncatePath(file.path)}',
+              file.path,
               style: AppTextStyles.body.copyWith(
                 color: Colors.white,
                 fontFamily: 'monospace',
+                fontSize: 11,
               ),
             ),
             backgroundColor: AppColors.actionExportTherion,

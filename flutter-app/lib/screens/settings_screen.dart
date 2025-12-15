@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../models/settings.dart';
 import '../services/storage_service.dart';
-import '../services/export_service.dart';
 import '../services/magnetometer_service.dart';
 import '../services/compass_service.dart';
 import '../utils/theme_extensions.dart';
@@ -116,38 +115,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<void> _exportData(String format) async {
-    final storageService = context.read<StorageService>();
-    final exportService = context.read<ExportService>();
-    final settings = context.read<Settings>();
-
-    final allData = await storageService.getAllSurveyData();
-
-    if (allData.isEmpty) {
-      _showError('No survey data to export');
-      return;
-    }
-
-    try {
-      if (format == 'csv') {
-        await exportService.exportToCSV(allData, settings.surveyName);
-      } else if (format == 'therion') {
-        await exportService.exportToTherion(allData, settings.surveyName);
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Exported ${allData.length} points as $format'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      _showError('Export failed: $e');
-    }
-  }
-
   Future<void> _showAboutDialog() async {
     showAboutDialog(
       context: context,
@@ -167,8 +134,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'Features:\n'
           '• Automatic distance measurement\n'
           '• Manual tie-off points\n'
-          '• Live 2D map view\n'
-          '• CSV and Therion export\n',
+          '• Live 2D map view\n',
         ),
       ],
     );
@@ -322,40 +288,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 );
               },
-            ),
-            const SizedBox(height: AppSpacing.medium),
-
-            // Data Export Section
-            _buildSectionHeader('Data Export'),
-            const SizedBox(height: AppSpacing.small),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _exportData('csv'),
-                    icon: const Icon(Icons.file_download),
-                    label: const Text('Export CSV'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.actionExportCSV,
-                      foregroundColor: AppColors.textPrimary,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _exportData('therion'),
-                    icon: const Icon(Icons.map),
-                    label: const Text('Export Therion'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.actionExportTherion,
-                      foregroundColor: AppColors.textPrimary,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                  ),
-                ),
-              ],
             ),
             const SizedBox(height: AppSpacing.medium),
 
