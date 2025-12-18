@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'dart:io';
 import '../models/settings.dart';
 import '../services/storage_service.dart';
+import '../services/export_service.dart';
 import '../services/magnetometer_service.dart';
 import '../services/compass_service.dart';
 import '../utils/theme_extensions.dart';
@@ -115,6 +117,142 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Future<void> _exportData(String format) async {
+    final storageService = context.read<StorageService>();
+    final exportService = context.read<ExportService>();
+    final settings = context.read<Settings>();
+
+    final allData = await storageService.getAllSurveyData();
+
+    if (allData.isEmpty) {
+      _showError('No survey data to export');
+      return;
+    }
+
+    try {
+      final timestamp = DateTime.now();
+      final timeString =
+          '${settings.surveyName}_'
+          '${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')}_'
+          '${timestamp.hour.toString().padLeft(2, '0')}-${timestamp.minute.toString().padLeft(2, '0')}-${timestamp.second.toString().padLeft(2, '0')}';
+
+      File file;
+      if (format == 'csv') {
+        file = await exportService.exportToCSV(allData, '$timeString.csv');
+      } else {
+        file = await exportService.exportToTherion(allData, timeString);
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              file.path,
+              style: AppTextStyles.body.copyWith(
+                color: Colors.white,
+                fontFamily: 'monospace',
+                fontSize: 11,
+              ),
+            ),
+            backgroundColor: format == 'csv'
+                ? AppColors.actionExportCSV
+                : AppColors.actionExportTherion,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      _showError('Export failed: $e');
+    }
+  }
+
+  Future<void> _importData() async {
+    final exportService = context.read<ExportService>();
+    final storageService = context.read<StorageService>();
+
+    // Check if data already exists
+    final existingData = await storageService.getAllSurveyData();
+    if (existingData.isNotEmpty) {
+      _showError('Cannot import: existing survey data found.\n\nPlease reset survey data before importing.');
+      return;
+    }
+
+    try {
+      // Import CSV data
+      final importedData = await exportService.importFromCSV();
+
+      if (importedData.isEmpty) {
+        _showError('No data found in CSV file');
+        return;
+      }
+
+      // Show confirmation dialog
+      if (mounted) {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: AppColors.backgroundSecondary,
+            title: Text(
+              'Import Survey Data',
+              style: AppTextStyles.body.copyWith(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            content: Text(
+              'Found ${importedData.length} survey points.\n\n'
+              'Continue with import?',
+              style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text(
+                  'Cancel',
+                  style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.actionSave,
+                ),
+                child: Text(
+                  'Import',
+                  style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
+                ),
+              ),
+            ],
+          ),
+        );
+
+        if (confirmed != true) {
+          return;
+        }
+      }
+
+      // Save imported data
+      for (final point in importedData) {
+        await storageService.saveSurveyPoint(point);
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Successfully imported ${importedData.length} survey points',
+              style: AppTextStyles.body.copyWith(color: Colors.white),
+            ),
+            backgroundColor: AppColors.actionSave,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      _showError('Import failed: $e');
+    }
+  }
+
   Future<void> _showAboutDialog() async {
     showAboutDialog(
       context: context,
@@ -169,6 +307,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     controller: _surveyNameController,
                     label: 'Survey Name',
                     hint: 'Enter cave/site name',
+                  ),
+                  const SizedBox(height: AppSpacing.medium),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => _exportData('csv'),
+                          icon: const Icon(Icons.file_download),
+                          label: const Text('Export CSV'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.actionExportCSV,
+                            foregroundColor: AppColors.textPrimary,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => _exportData('therion'),
+                          icon: const Icon(Icons.map),
+                          label: const Text('Export Therion'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.actionExportTherion,
+                            foregroundColor: AppColors.textPrimary,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.small),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _importData,
+                          icon: const Icon(Icons.file_upload),
+                          label: const Text('Import CSV'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.actionSave,
+                            foregroundColor: AppColors.textPrimary,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

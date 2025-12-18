@@ -23,10 +23,13 @@ class MainScreen extends StatefulWidget {
   State<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> {
+class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateMixin {
   bool _showCalibrationToast = false;
   Timer? _resetHoldTimer;
   bool _isResetting = false;
+  bool _isHoldingReset = false;
+  double _resetHoldProgress = 0.0;
+  Timer? _resetProgressTimer;
 
   @override
   void initState() {
@@ -52,6 +55,7 @@ class _MainScreenState extends State<MainScreen> {
     context.read<MagnetometerService>().stopListening();
     context.read<CompassService>().stopListening();
     _resetHoldTimer?.cancel();
+    _resetProgressTimer?.cancel();
     super.dispose();
   }
 
@@ -105,16 +109,48 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void _onResetTapDown() {
+    setState(() {
+      _isHoldingReset = true;
+      _resetHoldProgress = 0.0;
+    });
+
+    // Start the hold timer
     _resetHoldTimer = Timer(const Duration(seconds: 6), () {
       _performReset();
+    });
+
+    // Start progress animation (updates 60 times per second for smooth animation)
+    const updateInterval = Duration(milliseconds: 16); // ~60fps
+    const totalDuration = 6000; // 6 seconds in milliseconds
+    int elapsed = 0;
+
+    _resetProgressTimer = Timer.periodic(updateInterval, (timer) {
+      elapsed += updateInterval.inMilliseconds;
+      if (mounted) {
+        setState(() {
+          _resetHoldProgress = (elapsed / totalDuration).clamp(0.0, 1.0);
+        });
+      }
+
+      if (elapsed >= totalDuration) {
+        timer.cancel();
+      }
     });
   }
 
   void _onResetTapUp() {
     _resetHoldTimer?.cancel();
     _resetHoldTimer = null;
+    _resetProgressTimer?.cancel();
+    _resetProgressTimer = null;
 
-    if (!_isResetting) {
+    final wasHolding = _isHoldingReset;
+    setState(() {
+      _isHoldingReset = false;
+      _resetHoldProgress = 0.0;
+    });
+
+    if (!_isResetting && wasHolding && _resetHoldProgress < 1.0) {
       // Show hint about long-press
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -128,10 +164,21 @@ class _MainScreenState extends State<MainScreen> {
   void _onResetTapCancel() {
     _resetHoldTimer?.cancel();
     _resetHoldTimer = null;
+    _resetProgressTimer?.cancel();
+    _resetProgressTimer = null;
+
+    setState(() {
+      _isHoldingReset = false;
+      _resetHoldProgress = 0.0;
+    });
   }
 
   Future<void> _performReset() async {
-    _isResetting = true;
+    setState(() {
+      _isResetting = true;
+      _isHoldingReset = false;
+      _resetHoldProgress = 0.0;
+    });
 
     final storageService = context.read<StorageService>();
     final exportService = context.read<ExportService>();
@@ -146,7 +193,7 @@ class _MainScreenState extends State<MainScreen> {
       try {
         final timestamp = DateTime.now();
         final fileName =
-            'cave_survey_backup_'
+            'backup_'
             '${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')}_'
             '${timestamp.hour.toString().padLeft(2, '0')}-${timestamp.minute.toString().padLeft(2, '0')}-${timestamp.second.toString().padLeft(2, '0')}'
             '.csv';
@@ -304,6 +351,8 @@ class _MainScreenState extends State<MainScreen> {
                     icon: Icons.refresh,
                     label: 'Reset',
                     color: AppColors.actionReset,
+                    showProgress: _isHoldingReset,
+                    progressValue: _resetHoldProgress,
                   ),
 
                   PositionedButton(

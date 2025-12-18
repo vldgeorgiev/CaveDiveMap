@@ -91,7 +91,7 @@ To start a new survey:
 
 1. **Hold Reset Button**: Press and hold the reset button for **10 seconds**
 2. **Automatic Backup**: System automatically exports current data to CSV before clearing
-   - Backup saved to: `Documents/CaveDiveMap/cave_survey_backup_YYYY-MM-DD_HH-mm-ss.csv`
+   - Backup saved to: `Documents/CaveDiveMap/backup_YYYY-MM-DD_HH-mm-ss.csv`
    - Export path shown in notification for 3 seconds
 3. **Data Cleared**: All survey points are removed after successful backup
 

@@ -16,6 +16,8 @@ class PositionedButton extends StatelessWidget {
   final void Function(TapDownDetails)? onTapDown;
   final void Function(TapUpDetails)? onTapUp;
   final VoidCallback? onTapCancel;
+  final bool showProgress;
+  final double progressValue;
 
   const PositionedButton({
     super.key,
@@ -28,6 +30,8 @@ class PositionedButton extends StatelessWidget {
     this.onTapDown,
     this.onTapUp,
     this.onTapCancel,
+    this.showProgress = false,
+    this.progressValue = 0.0,
   });
 
   @override
@@ -52,6 +56,8 @@ class PositionedButton extends StatelessWidget {
         onTapDown: onTapDown,
         onTapUp: onTapUp,
         onTapCancel: onTapCancel,
+        showProgress: showProgress,
+        progressValue: progressValue,
       ),
     );
   }

@@ -41,7 +41,7 @@
 ### Task 2.3: Add Automatic CSV Export Before Reset
 
 - [x] Create `_exportBeforeReset()` method in `main_screen.dart`
-- [x] Generate timestamped filename: `cave_survey_backup_YYYY-MM-DD_HH-mm-ss.csv`
+- [x] Generate timestamped filename: `backup_YYYY-MM-DD_HH-mm-ss.csv`
 - [x] Call `ExportService.exportToCSV()` before clearing data
 - [x] Use try-catch to handle export failures gracefully
 - [x] Show error notification if export fails (but still allow reset)

@@ -56,7 +56,7 @@ The application SHALL automatically export all survey data to a timestamped CSV 
 
 **Given** application has 15 survey points  
 **When** user triggers reset after 10-second hold  
-**Then** system SHALL export CSV file with filename format `cave_survey_backup_YYYY-MM-DD_HH-mm-ss.csv`  
+**Then** system SHALL export CSV file with filename format `backup_YYYY-MM-DD_HH-mm-ss.csv`  
 **And** CSV file SHALL contain all 15 survey points  
 **And** CSV file SHALL be created in temporary directory  
 **And** file creation SHALL complete before data is cleared
@@ -150,8 +150,8 @@ The application SHALL automatically load all persisted survey data from Hive sto
 ### Export Filename Format
 
 ```
-cave_survey_backup_YYYY-MM-DD_HH-mm-ss.csv
-Example: cave_survey_backup_2025-12-11_14-30-45.csv
+backup_YYYY-MM-DD_HH-mm-ss.csv
+Example: backup_2025-12-11_14-30-45.csv
 ```
 
 ### File Path Truncation Logic
