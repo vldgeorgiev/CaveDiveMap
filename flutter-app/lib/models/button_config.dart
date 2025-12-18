@@ -66,7 +66,7 @@ class ButtonConfig {
       const ButtonConfig(size: 75, offsetX: 0, offsetY: 200);
 
   static ButtonConfig defaultMainMap() =>
-      const ButtonConfig(size: 75, offsetX: 130, offsetY: 190);
+      const ButtonConfig(size: 75, offsetX: 130, offsetY: 200);
 
   static ButtonConfig defaultMainReset() =>
       const ButtonConfig(size: 75, offsetX: -70, offsetY: 110);
@@ -76,14 +76,14 @@ class ButtonConfig {
 
   // Save Data View Defaults (matching Swift app)
   static ButtonConfig defaultSaveDataSave() =>
-      const ButtonConfig(size: 70, offsetX: 0, offsetY: 120);
+      const ButtonConfig(size: 75, offsetX: 0, offsetY: 200);
 
   static ButtonConfig defaultSaveDataIncrement() =>
-      const ButtonConfig(size: 70, offsetX: 100, offsetY: 80);
+      const ButtonConfig(size: 75, offsetX: 70, offsetY: 110);
 
   static ButtonConfig defaultSaveDataDecrement() =>
-      const ButtonConfig(size: 70, offsetX: -100, offsetY: 80);
+      const ButtonConfig(size: 75, offsetX: -70, offsetY: 110);
 
   static ButtonConfig defaultSaveDataCycle() =>
-      const ButtonConfig(size: 70, offsetX: 150, offsetY: 150);
+      const ButtonConfig(size: 75, offsetX: 130, offsetY: 200);
 }
