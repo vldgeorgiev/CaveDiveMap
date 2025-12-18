@@ -6,6 +6,7 @@ import '../services/compass_service.dart';
 import '../services/storage_service.dart';
 import '../services/export_service.dart';
 import '../services/button_customization_service.dart';
+import '../models/settings.dart';
 import '../widgets/positioned_button.dart';
 import '../widgets/monospaced_text.dart';
 import '../widgets/heading_accuracy_indicator.dart';
@@ -267,12 +268,13 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
         ),
       ),
       body:
-          Consumer3<
+          Consumer4<
             MagnetometerService,
             CompassService,
-            ButtonCustomizationService
+            ButtonCustomizationService,
+            Settings
           >(
-            builder: (context, magnetometer, compass, buttonService, child) {
+            builder: (context, magnetometer, compass, buttonService, settings, child) {
               return Stack(
                 children: [
                   // Main sensor data display
@@ -317,6 +319,8 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
                           // Magnetic strength indicator
                           _buildMagneticStrengthIndicator(
                             magnetometer.magneticStrength,
+                            settings.minPeakThreshold,
+                            settings.maxPeakThreshold,
                           ),
 
                           // Spacer to push buttons to bottom
@@ -392,17 +396,26 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildMagneticStrengthIndicator(double strength) {
-    // Normalize strength to 0-100 range for display
-    final normalizedStrength = (strength / 100.0).clamp(0.0, 1.0);
+  Widget _buildMagneticStrengthIndicator(
+    double strength,
+    double minThreshold,
+    double maxThreshold,
+  ) {
+    // Calculate display range: 0 to maxThreshold + 20%
+    final displayMax = maxThreshold * 1.2;
+    final normalizedStrength = (strength / displayMax).clamp(0.0, 1.0);
 
+    // Three-color scheme based on thresholds (avoiding red)
     Color strengthColor;
-    if (normalizedStrength > 0.7) {
+    if (strength < minThreshold) {
+      // Below min: green (baseline)
       strengthColor = AppColors.statusGood;
-    } else if (normalizedStrength > 0.4) {
-      strengthColor = AppColors.statusWarning;
+    } else if (strength > maxThreshold) {
+      // Above max: green (baseline)
+      strengthColor = AppColors.statusGood;
     } else {
-      strengthColor = AppColors.statusBad;
+      // Between min and max: blue (good detection range)
+      strengthColor = Colors.blue;
     }
 
     return Column(
