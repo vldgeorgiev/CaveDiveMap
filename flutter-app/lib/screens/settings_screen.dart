@@ -33,15 +33,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     final settings = context.read<Settings>();
     _wheelDiameterController = TextEditingController(
-      text: (settings.wheelDiameter * 1000).toStringAsFixed(
-        1,
-      ), // Convert m to mm for display
+      text: settings.wheelDiameter.toStringAsFixed(1),
     );
     _minPeakThresholdController = TextEditingController(
-      text: settings.minPeakThreshold.toStringAsFixed(1),
+      text: settings.minPeakThreshold.toInt().toString(),
     );
     _maxPeakThresholdController = TextEditingController(
-      text: settings.maxPeakThreshold.toStringAsFixed(1),
+      text: settings.maxPeakThreshold.toInt().toString(),
     );
     _surveyNameController = TextEditingController(text: settings.surveyName);
 
@@ -91,8 +89,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
-    // Convert mm to meters for storage
-    settings.updateWheelDiameter(wheelDiameterMm / 1000);
+    settings.updateWheelDiameter(wheelDiameterMm);
     settings.updateMinPeakThreshold(minPeakThreshold);
     settings.updateMaxPeakThreshold(maxPeakThreshold);
     settings.updateSurveyName(_surveyNameController.text);
@@ -292,6 +289,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         backgroundColor: AppColors.backgroundPrimary,
         elevation: 0,
+        automaticallyImplyLeading: false,
+        leading: IconButton(
+          icon: const Icon(Icons.close, size: 32),
+          color: Colors.red,
+          onPressed: () => Navigator.pop(context),
+          tooltip: 'Cancel',
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.check, size: 32),
+            color: AppColors.actionSave,
+            onPressed: _saveSettings,
+            tooltip: 'Save',
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: SafeArea(
         child: ListView(
@@ -299,7 +312,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             // Survey Configuration Section
             _buildSectionHeader('Survey Configuration'),
-            const SizedBox(height: AppSpacing.small),
+            const SizedBox(height: 8),
             InfoCard(
               child: Column(
                 children: [
@@ -308,7 +321,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     label: 'Survey Name',
                     hint: 'Enter cave/site name',
                   ),
-                  const SizedBox(height: AppSpacing.medium),
+                  const SizedBox(height: 12),
                   Row(
                     children: [
                       Expanded(
@@ -319,7 +332,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.actionExportCSV,
                             foregroundColor: AppColors.textPrimary,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
                           ),
                         ),
                       ),
@@ -332,13 +345,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.actionExportTherion,
                             foregroundColor: AppColors.textPrimary,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
                           ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: AppSpacing.small),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
                       Expanded(
@@ -349,7 +362,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.actionSave,
                             foregroundColor: AppColors.textPrimary,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
                           ),
                         ),
                       ),
@@ -358,11 +371,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: AppSpacing.medium),
+            const SizedBox(height: 16),
 
             // Wheel Settings Section
             _buildSectionHeader('Wheel Settings'),
-            const SizedBox(height: AppSpacing.small),
+            const SizedBox(height: 8),
             InfoCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -375,7 +388,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       decimal: true,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
                     'Measure wheel diameter in millimeters',
                     style: AppTextStyles.caption.copyWith(
@@ -386,11 +399,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: AppSpacing.medium),
+            const SizedBox(height: 16),
 
             // Sensor Configuration Section
             _buildSectionHeader('Sensor Configuration'),
-            const SizedBox(height: AppSpacing.small),
+            const SizedBox(height: 8),
             InfoCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -398,21 +411,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _buildTextField(
                     controller: _minPeakThresholdController,
                     label: 'Min Peak Threshold (μT)',
-                    hint: '50.0',
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
+                    hint: '50',
+                    keyboardType: TextInputType.number,
                   ),
-                  const SizedBox(height: AppSpacing.small),
+                  const SizedBox(height: 8),
                   _buildTextField(
                     controller: _maxPeakThresholdController,
                     label: 'Max Peak Threshold (μT)',
-                    hint: '200.0',
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
+                    hint: '200',
+                    keyboardType: TextInputType.number,
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
                     'Magnetic field range for wheel rotation detection',
                     style: AppTextStyles.caption.copyWith(
@@ -423,11 +432,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: AppSpacing.xLarge),
+            const SizedBox(height: 16),
 
             // Live Magnetometer Section
             _buildSectionHeader('Magnetic Field Readout'),
-            const SizedBox(height: AppSpacing.small),
+            const SizedBox(height: 8),
             Consumer2<MagnetometerService, CompassService>(
               builder: (context, magnetometer, compass, child) {
                 return InfoCard(
@@ -441,11 +450,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      const SizedBox(height: AppSpacing.small),
+                      const SizedBox(height: 8),
                       _buildSensorRow('X', magnetometer.magnetometerX),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 4),
                       _buildSensorRow('Y', magnetometer.magnetometerY),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 4),
                       _buildSensorRow('Z', magnetometer.magnetometerZ),
                       const Divider(height: 20),
                       _buildSensorRow(
@@ -453,7 +462,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         magnetometer.magneticStrength,
                         highlight: true,
                       ),
-                      const SizedBox(height: AppSpacing.small),
+                      const SizedBox(height: 8),
                       Text(
                         'Compass',
                         style: AppTextStyles.body.copyWith(
@@ -461,9 +470,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      const SizedBox(height: AppSpacing.small),
+                      const SizedBox(height: 8),
                       _buildSensorRow('Heading', compass.heading, suffix: '°'),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 4),
                       _buildSensorRow(
                         'Accuracy',
                         compass.accuracy,
@@ -474,11 +483,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 );
               },
             ),
-            const SizedBox(height: AppSpacing.medium),
+            const SizedBox(height: 16),
 
             // Button Customization Section
             _buildSectionHeader('Interface'),
-            const SizedBox(height: AppSpacing.small),
+            const SizedBox(height: 8),
             Consumer<Settings>(
               builder: (context, settings, child) {
                 return InfoCard(
@@ -584,11 +593,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 );
               },
             ),
-            const SizedBox(height: AppSpacing.medium),
+            const SizedBox(height: 16),
 
             // Links Section
             _buildSectionHeader('Information'),
-            const SizedBox(height: AppSpacing.small),
+            const SizedBox(height: 8),
             InfoCard(
               child: Column(
                 children: [
@@ -650,25 +659,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: AppSpacing.large),
-
-            // Save Button
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _saveSettings,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.actionSave,
-                  foregroundColor: AppColors.textPrimary,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                child: const Text(
-                  'Save Settings',
-                  style: TextStyle(fontSize: 18),
-                ),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.large),
+            const SizedBox(height: 16),
           ],
         ),
       ),
@@ -676,14 +667,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _launchURL(String url) async {
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
+    try {
+      final uri = Uri.parse(url);
       await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
+    } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Could not open $url')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not open $url'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
@@ -716,6 +710,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         hintStyle: AppTextStyles.body.copyWith(color: AppColors.textHint),
         filled: true,
         fillColor: AppColors.backgroundSecondary,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide.none,
