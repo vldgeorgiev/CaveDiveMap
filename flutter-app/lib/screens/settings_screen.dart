@@ -34,7 +34,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     final settings = context.read<Settings>();
     _wheelDiameterController = TextEditingController(
-      text: settings.wheelDiameter.toStringAsFixed(1),
+      text: (settings.wheelDiameter * 1000).toStringAsFixed(1),
     );
     _minPeakThresholdController = TextEditingController(
       text: settings.minPeakThreshold.toInt().toString(),
@@ -90,7 +90,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
 
-    settings.updateWheelDiameter(wheelDiameterMm);
+    // Convert mm to meters for storage
+    settings.updateWheelDiameter(wheelDiameterMm / 1000);
     settings.updateMinPeakThreshold(minPeakThreshold);
     settings.updateMaxPeakThreshold(maxPeakThreshold);
     settings.updateSurveyName(_surveyNameController.text);
