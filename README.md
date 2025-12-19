@@ -1,47 +1,156 @@
-IOS APP designed for Iphone which uses a waterproof case for the phone and 3d printed wheel with a magnet to measure lines in underwater caves.
+# CaveDiveMap
 
-Concept:
-The app uses the magnetometer to detect the proximity of a magnet on a wheel.
-The wheel is clamped around the cave diving line and rotates as the diver moves the device forward.
-Each rotation the app detects the peak magnetic field value and by knowing the diameter/circumference of the wheel masures the distance traveled along the line.
+**Cross-platform mobile app** (iOS & Android) for underwater cave surveying using magnetometer-based distance measurement.
 
-The app then saves a data point each rotation with the following data: point number, compass heading, distance ( total from the first point ), depth ( user can adjust via 2 buttons on the dive case ).
+## Overview
 
-The app has also manual points which are added by the diver on each tieoff point.
+CaveDiveMap turns your smartphone into a cave survey tool by combining a simple 3D-printed measurement device with the phone's built-in sensors.
 
-The survey data can be exported in CSV and shared via IOS share opitons.
+**Concept**:
 
-There is also option to view a live map for reference during the dive.
+The app uses the magnetometer to detect the proximity of a magnet embedded in a measurement wheel. The wheel is clamped around the cave diving guideline and rotates as the diver moves the device forward. Each rotation triggers a peak in the magnetic field, and by knowing the wheel's circumference, the app calculates the distance traveled along the line.
 
-Credits: Code entirely written by ChatGPT. I don't code on SWIFT language or IOS.
+**Warning**:
 
-The device:
-The app requires a 3d printed device which is attached to an iphone dive case.
-The device contains the measuring wheel and guideline clamp mechanism.
+The application is still in beta. The concept has been tested multiple times with iPhone 15/16, and Samsung S21/S23. It is reliable in general, but see the section **Limitations** below.
 
-My goals for the device:
-I wanted the device to be fully 3d printable, so you can make it in any place where there is a 3d printer available. 
-No springs or screws, nuts or other hardware required.
+## Features
 
+### Magnetometer Distance Measurement
 
-Currently, only non 3d printed parts needed are:
-- Rubber band for keeping the slider gate clamped down/tensioned on the cave line.
-- small magnet 8mm in diameter. ( available in hardware stores )
-If you have a bigger magnet, you can drill out the hole bigger or melt it or glue it on the wheel whatever works.
+- Peak detection algorithm identifies each wheel rotation
+- Configurable wheel circumference for accurate measurements
+- Automatic survey point generation
+- Automatic calibration of compass
+- Real-time heading accuracy indicator
 
+### Manual Survey Stations
 
-App is now available in app store:
-https://apps.apple.com/bg/app/cavedivemap/id6743342160
+- Add points at tie-off locations with passage dimensions
+- Cyclic parameter editing (depth → left → right → up → down)
+- Press-and-hold for rapid value adjustment
 
-STL files for the measurement wheel device available at:
-https://www.thingiverse.com/thing:6950056
+### Live Visualization
 
-Dive Case I use for iphone 15:
-https://hz.aliexpress.com/i/1005005277943648.html?src=google&albch=search&acnt=479-062-3723&isdl=y&aff_short_key=UneMJZVf&albcp=266121556&albag=7593673036&slnk=&trgt=dsa-42862830006&plac=&crea=426823514858&albad=426823514858&netw=g&device=c&mtctp=&memo1=&albbt=Google_7_search&aff_platform=google&albagn=888888&isSmbActive=false&isSmbAutoCall=false&needSmbHouyi=false&gad_source=1&gclid=CjwKCAiAtsa9BhAKEiwAUZAszdImIvknDFVuMjy0B4ktC4mgl3NdYCsqJR2yrvNp2XDpOteMqIDGphoCJgsQAvD_BwE
+- 2D map view for reference during the dive
+- Touch gestures: pan, zoom, rotate
+- North-oriented compass overlay
+- Wall profiles rendered from manual point dimensions
 
-The app in run mode:
-![screenshot](Manual/front.jpg)
+### Data Captured
 
+- Point number (sequential)
+- Compass heading (magnetic degrees)
+- Distance (cumulative from start point)
+- Depth (manually adjusted via buttons)
+- Passage dimensions (left/right/up/down at manual survey stations)
 
-The example live map view:
-![screenshot](Manual/map-view.jpg)
+### Data Import and Export
+
+- **CSV**: Complete survey data for spreadsheets and analysis
+- **Therion**: Popular cave survey software format
+- Share via mobile share options (iOS/Android)
+- A CSV file can be imported again, in case the survey has to be resumed
+
+### Button Customization
+
+- Reposition and resize all interface buttons
+- Essential for underwater usability with thick waterproof cases
+- Settings persist across app launches
+
+## Development Setup
+
+### Flutter App
+
+**Requirements**:
+
+- Flutter 3.38+ and Dart 3.10+
+- iOS: Xcode 14+ (iOS 12.0+ deployment target)
+- Android: Android Studio with SDK 26+ (Android 8.0+)
+
+**Build**:
+Install Flutter: https://docs.flutter.dev/get-started/install
+
+```bash
+git clone https://github.com/vldgeorgiev/CaveDiveMap.git
+cd flutter-app
+flutter pub get
+flutter run
+```
+
+**Key Dependencies**:
+
+- `sensors_plus 7.0.0` - Magnetometer access
+- `flutter_compass 0.8.1` - Compass heading
+- `hive 2.2.3` - Local storage (NoSQL database)
+- `provider 6.1.5` - State management
+- `share_plus` - Export functionality
+
+### Archived iOS App
+
+See `archive/README.md` for building the original Swift version (reference only).
+
+## Hardware Device
+
+### 3D Printed Measurement Wheel
+
+The app requires a 3D-printed device attached to a smartphone in a waterproof dive case. The device contains the measuring wheel and guideline clamp mechanism.  The magnet should be positioned to pass as close as possible to the phone sensor.
+
+**Design Goals**:
+
+Fully 3D printable so you can make it anywhere with a 3D printer available. No screws, nuts, springs, or other hardware required.
+
+**Non-Printed Parts**:
+
+- Rubber band (keeps slider gate clamped/tensioned on the cave line)
+- Small 8mm diameter magnet (available in hardware stores)
+
+**Resources**:
+
+- **STL Files**: [Thingiverse](https://www.thingiverse.com/thing:6950056)
+- **Divevolk Seatouch 4 Plus**: The best [case](https://www.divevolkdiving.com/products/divevolk-seatouch-4max-underwater-iphone-diving-housing-iphone-diving-case-compatiable-for-iphone-12-pro-max-13-pro-13-pro-max) for the current application, because it allows full touch access to the screen. 
+- **Dive Case** (iPhone 15): [AliExpress Link](https://hz.aliexpress.com/i/1005005277943648.html)
+
+## Limitations and considerations
+
+There are many models of phones and OS, especially with Android. It is not possible to guarantee the application will work with all of them, or if the results will be reliable. Please test your device on land first to make sure it works as expected.
+
+### Location of phone magnetic sensor
+
+The rotating wheel with the magnet must be as close as possible to the sensor. On iPhone 15 and Samsung S21 and S23 the sensor is in the top left corner, but it may differ on other devices.  
+Before printing the 3D parts you have to iddentify the location. To do this, install the application and open the main screen, which shows an inddicator bar and the value of the field magnitude. Place a small magnet next to the phone case and start moving it slowly, until you find the location, which read the largest value. This is where the wheel should be.
+
+### Orientation of phone and auto-calibration
+
+The orientation of the phone can influence the magnitude when the magnet and the Earth's field are combined. In some cases the magnitude values can change considerably, which makes finding proper min/max threshold values problematic. In practice it means that the device may detect the rotations in one orientation, but not in another.
+
+Some phones automatically try to compensate for local magnetic fields, such as the magnetic wheel in our case. This compensation is useful for the azimuth reading, but can affect the magnitude readings and min/max thresholds. The only way to verify this is to test in various orientations, rotating the phone, giving it time to calibrate, compare the measured distances to a known one
+
+### Location of the wheel
+
+The wheel has to be located as close as 
+- The magnetic field magnitude values can vary depending on the phone orientation. 
+
+## Screenshots
+
+![Front View](Manual/front.jpg)
+
+Live map view during dive:
+
+![Map View](Manual/map-view.jpg)
+
+## Credits
+
+**Original Swift iOS app**: [https://github.com/f0xdude/CaveDiveMap](https://github.com/f0xdude/CaveDiveMap)
+> **Migration Note**: This repository now contains the Flutter cross-platform version. The original Swift iOS app is archived in `archive/swift-ios-app/` and is available on the [App Store](https://apps.apple.com/bg/app/cavedivemap/id6743342160).
+
+## License
+
+See repository for license details.
+
+## Resources
+
+- **App Store**: <https://apps.apple.com/bg/app/cavedivemap/id6743342160>
+- **3D Print Files**: <https://www.thingiverse.com/thing:6950056>
+- **Flutter App**: See `flutter-app/README.md` for setup details
+- **Technical Docs**: See `openspec/project.md` for architecture details
