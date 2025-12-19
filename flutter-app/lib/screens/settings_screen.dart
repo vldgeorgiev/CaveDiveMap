@@ -609,7 +609,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       color: AppColors.textSecondary,
                     ),
                     onTap: () =>
-                        _launchURL('https://github.com/f0xdude/CaveDiveMap'),
+                        _launchURL('https://github.com/vldgeorgiev/CaveDiveMap'),
                   ),
                   const Divider(height: 1),
                   ListTile(

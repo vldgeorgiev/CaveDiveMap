@@ -6,8 +6,6 @@ Cross-platform cave diving survey application for iOS and Android.
 
 CaveDiveMap is a cross-platform rewrite of the iOS-only CaveDiveMap application. It uses magnetometer-based distance measurement to survey underwater cave passages.
 
-**Original iOS Repository**: [f0xdude/CaveDiveMap](https://github.com/f0xdude/CaveDiveMap)
-
 ## Features
 
 - **Magnetometer-based Distance Measurement**: 3D-printed wheel with magnet rotates as diver moves along guideline
@@ -27,26 +25,6 @@ CaveDiveMap is a cross-platform rewrite of the iOS-only CaveDiveMap application.
 - Dart 3.10+
 - iOS 12.0+ or Android 8.0+ (API 26)
 - Device with magnetometer and compass sensors
-
-## Setup
-
-1. Install Flutter: https://docs.flutter.dev/get-started/install
-
-2. Clone repository:
-   ```bash
-   git clone https://github.com/f0xdude/CaveDiveMap-Flutter.git
-   cd cavedivemap_flutter
-   ```
-
-3. Install dependencies:
-   ```bash
-   flutter pub get
-   ```
-
-4. Run app:
-   ```bash
-   flutter run
-   ```
 
 ## Architecture
 
@@ -76,26 +54,25 @@ lib/
 
 ### Data Collection
 
-1. **Start Recording**: Tap "Start Recording" on main screen
-2. **Auto Points**: System automatically saves survey points every 10 wheel rotations (2.63m)
+1. **Auto Points**: System automatically saves survey points every wheel rotation
    - Includes distance, compass heading, and depth
    - Point counter increments automatically
-3. **Manual Points**: Navigate to "Save Data" screen to add manual measurements
+2. **Manual Points**: Navigate to "Save Data" screen to add manual measurements
    - Enter left, right, up, down dimensions
    - Manual points include all auto-point data plus dimensions
-4. **Data Persistence**: All survey data is automatically saved and persists across app restarts
+3. **Data Persistence**: All survey data is automatically saved and persists across app restarts
 
 ### Resetting Survey Data
 
 To start a new survey:
 
-1. **Hold Reset Button**: Press and hold the reset button for **10 seconds**
+1. **Hold Reset Button**: Press and hold the reset button for **6 seconds**
 2. **Automatic Backup**: System automatically exports current data to CSV before clearing
    - Backup saved to: `Documents/CaveDiveMap/backup_YYYY-MM-DD_HH-mm-ss.csv`
    - Export path shown in notification for 3 seconds
 3. **Data Cleared**: All survey points are removed after successful backup
 
-**Note**: No confirmation dialog is shown - the 10-second hold is the safety mechanism.
+**Note**: No confirmation dialog is shown - the several second hold is the safety mechanism.
 
 ### Exporting Data
 
@@ -125,22 +102,6 @@ To view all collected survey data:
    - Point type (auto/manual)
    - Color-coded rows by type
 
-## Data Migration from iOS App
-
-To transfer survey data from the original iOS app:
-
-1. Export data from iOS app (Settings → Export JSON)
-2. Transfer JSON file to Android device
-3. In Flutter app: Settings → Import from iOS App
-4. Select JSON file
-
-## Hardware
-
-Requires custom 3D-printed measurement wheel:
-- **STL Files**: https://www.thingiverse.com/thing:6950056
-- **Magnet**: 8mm neodymium magnet
-- **Attachment**: Clips to waterproof case
-
 ## Development
 
 ### Running Tests
@@ -165,12 +126,7 @@ flutter build apk --release
 
 This project follows the OpenSpec development workflow. See `openspec/` directory in the original repository for specifications and change proposals.
 
-## License
-
-[Add license information]
-
 ## Links
 
 - Original iOS App: https://apps.apple.com/bg/app/cavedivemap/id6743342160
 - 3D Print Files: https://www.thingiverse.com/thing:6950056
-- Documentation: See AGENTS.md in original repository

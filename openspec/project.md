@@ -93,7 +93,6 @@ Additional project directories:
 ### Git Workflow
 
 - Main branch: `main`
-- Repository owner: f0xdude
 - Credits: Original Swift code by ChatGPT (2024), Flutter migration with AI assistance (2025)
 
 ## Domain Context
