@@ -1,0 +1,51 @@
+name: Build and Release APK
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.0'
+          channel: 'stable'
+
+      - name: Install dependencies
+        working-directory: flutter-app
+        run: flutter pub get
+
+      - name: Build APK
+        working-directory: flutter-app
+        run: flutter build apk --build-name ${{ steps.version.outputs.VERSION }}
+
+      - name: Rename APK
+        run: mv flutter-app/build/app/outputs/flutter-apk/app-release.apk flutter-app/build/app/outputs/flutter-apk/cavedivemap.apk
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: flutter-app/build/app/outputs/flutter-apk/cavedivemap.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

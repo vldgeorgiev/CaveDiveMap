@@ -11,6 +11,7 @@ import '../utils/theme_extensions.dart';
 import '../widgets/info_card.dart';
 import '../widgets/monospaced_text.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'button_customization_screen.dart';
 import 'survey_data_debug_screen.dart';
 
@@ -251,10 +252,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _showAboutDialog() async {
+    final packageInfo = await PackageInfo.fromPlatform();
+    final version = '${packageInfo.version}';
+
     showAboutDialog(
       context: context,
       applicationName: 'CaveDiveMap',
-      applicationVersion: '2.0.0',
+      applicationVersion: version,
       applicationIcon: const Icon(Icons.explore, size: 48, color: Colors.blue),
       children: [
         const Text(
