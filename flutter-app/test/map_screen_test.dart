@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:cavedivemap_flutter/models/survey_data.dart';
+import 'package:cavedivemapf/models/survey_data.dart';
 import 'dart:math' as math;
 
 void main() {

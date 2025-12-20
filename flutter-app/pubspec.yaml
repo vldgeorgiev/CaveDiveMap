@@ -1,4 +1,4 @@
-name: cavedivemap_flutter
+name: cavedivemapf
 description: "Cross-platform cave diving survey application with magnetometer-based distance measurement"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.

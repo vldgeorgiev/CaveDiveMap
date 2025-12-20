@@ -26,7 +26,7 @@
 
 ### Project Setup
 
-- [x] Initialize Flutter project with `flutter create cavedivemap_flutter` (Flutter 3.38+)
+- [x] Initialize Flutter project with `flutter create cavedivemapf` (Flutter 3.38+)
 - [x] Configure iOS deployment target (iOS 12.0+)
 - [x] Configure Android minimum SDK (API 26 / Android 8.0+)
 - [x] Set up project structure (lib/models, lib/services, lib/screens, lib/widgets)
