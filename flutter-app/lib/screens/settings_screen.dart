@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'dart:io';
@@ -524,6 +525,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             WakelockPlus.enable();
                           } else {
                             WakelockPlus.disable();
+                          }
+                        },
+                      ),
+                      const Divider(height: 1),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          'Fullscreen Mode',
+                          style: AppTextStyles.body.copyWith(
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        subtitle: Text(
+                          'Hide system UI bars for immersive experience',
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        value: settings.fullscreen,
+                        activeColor: AppColors.actionSave,
+                        onChanged: (value) async {
+                          settings.updateFullscreen(value);
+                          final storageService = context.read<StorageService>();
+                          await storageService.saveSettings(settings);
+
+                          // Apply fullscreen mode immediately
+                          if (value) {
+                            SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+                          } else {
+                            SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
                           }
                         },
                       ),

@@ -17,6 +17,7 @@ CaveDiveMap is a cross-platform rewrite of the iOS-only CaveDiveMap application.
 - **Reset Workflow**: 10-second hold to reset with automatic backup export
 - **Debug Screen**: Table view of all survey points for data verification
 - **Live Visualization**: 2D map view during dives
+- **Configurable UI**: Fullscreen mode and keep screen on settings
 - **Cross-Platform**: Works on both iOS and Android
 
 ## Requirements

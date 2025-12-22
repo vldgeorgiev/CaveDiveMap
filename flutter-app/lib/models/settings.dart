@@ -9,6 +9,7 @@ class Settings extends ChangeNotifier {
   double _maxPeakThreshold;
   String _surveyName;
   bool _keepScreenOn;
+  bool _fullscreen;
 
   Settings({
     double wheelDiameter = 0.043, // Default 43mm diameter wheel
@@ -16,11 +17,13 @@ class Settings extends ChangeNotifier {
     double maxPeakThreshold = 100.0,
     String surveyName = 'survey',
     bool keepScreenOn = true, // Default: keep screen on during surveys
+    bool fullscreen = true, // Default: fullscreen mode enabled
   }) : _wheelDiameter = wheelDiameter,
        _minPeakThreshold = minPeakThreshold,
        _maxPeakThreshold = maxPeakThreshold,
        _surveyName = surveyName,
-       _keepScreenOn = keepScreenOn;
+       _keepScreenOn = keepScreenOn,
+       _fullscreen = fullscreen;
 
   // Getters
   double get wheelDiameter => _wheelDiameter;
@@ -29,6 +32,7 @@ class Settings extends ChangeNotifier {
   double get maxPeakThreshold => _maxPeakThreshold;
   String get surveyName => _surveyName;
   bool get keepScreenOn => _keepScreenOn;
+  bool get fullscreen => _fullscreen;
 
   // Update methods
   void updateWheelDiameter(double value) {
@@ -56,6 +60,11 @@ class Settings extends ChangeNotifier {
     notifyListeners();
   }
 
+  void updateFullscreen(bool value) {
+    _fullscreen = value;
+    notifyListeners();
+  }
+
   // Serialization
   Map<String, dynamic> toJson() {
     return {
@@ -64,6 +73,7 @@ class Settings extends ChangeNotifier {
       'maxPeakThreshold': _maxPeakThreshold,
       'surveyName': _surveyName,
       'keepScreenOn': _keepScreenOn,
+      'fullscreen': _fullscreen,
     };
   }
 
@@ -86,6 +96,7 @@ class Settings extends ChangeNotifier {
       maxPeakThreshold: json['maxPeakThreshold'] as double? ?? 100.0,
       surveyName: json['surveyName'] as String? ?? 'survey',
       keepScreenOn: json['keepScreenOn'] as bool? ?? true,
+      fullscreen: json['fullscreen'] as bool? ?? true,
     );
   }
 

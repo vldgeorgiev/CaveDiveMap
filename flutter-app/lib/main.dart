@@ -14,9 +14,6 @@ import 'utils/theme_extensions.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Enable fullscreen mode (hide all system UI)
-  SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-
   // Disable Provider type checking for non-Listenable services
   Provider.debugCheckInvalidValueType = null;
 
@@ -27,6 +24,13 @@ void main() async {
 
   // Load settings
   final settings = await storageService.loadSettings();
+
+  // Apply fullscreen mode based on settings
+  if (settings.fullscreen) {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  } else {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  }
 
   // Initialize and load button customization settings
   final buttonCustomizationService = ButtonCustomizationService(storageService);

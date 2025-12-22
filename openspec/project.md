@@ -105,7 +105,7 @@ Additional project directories:
 2. **Manual Points**: Added by diver at tie-off points
    - Includes additional measurements: left, right, up, down (passage dimensions)
 3. **Live Map View**: Reference during dive (2D top-down projection)
-4. **Post-Dive**: Export data via iOS share sheet
+4. **Post-Dive**: Export data
 
 ### Data Model: SurveyData
 
@@ -157,6 +157,10 @@ struct SavedData: Codable {
 - **Main Screen**: Live magnetometer data, distance, heading, depth controls
 - **Save Data Screen**: Manual point entry with cyclic parameter editing (depth → left → right → up → down)
 - **Settings Screen**: Configuration and button customization
+  - Keep Screen On: Prevents screen dimming during surveys (default: enabled)
+  - Fullscreen Mode: Hides system UI bars for immersive experience (default: enabled)
+  - Wheel calibration, sensor thresholds, survey naming
+  - Export/import functionality
 - **Map View Screen**: 2D cave profile visualization with touch gestures (pan, zoom, rotate)
 
 **Archived Swift Implementation** (reference):
@@ -263,6 +267,7 @@ Essential for underwater usability with thick waterproof cases:
 - Reset functionality for starting new surveys
 - All data stored locally in SQLite database (via Drift)
 - No cloud sync or backup (intentional design decision)
+- Configurable UI preferences (fullscreen mode, screen wake lock)
 
 ## Service Architecture
 
