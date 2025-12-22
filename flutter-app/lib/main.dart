@@ -21,7 +21,7 @@ void main() async {
   Provider.debugCheckInvalidValueType = null;
 
   // Initialize storage service and reload all persisted data
-  // Survey data automatically loads from Hive on startup
+  // Survey data automatically loads on startup
   final storageService = StorageService();
   await storageService.initialize();
 

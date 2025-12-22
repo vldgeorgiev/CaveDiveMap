@@ -88,7 +88,7 @@ The application SHALL provide compass/heading service on both platforms with acc
 
 ### Requirement: Data Storage (REQ-CROSS-004)
 
-The application SHALL use Hive for cross-platform data persistence, storing survey points and application settings.
+The application SHALL use Draft for cross-platform data persistence, storing survey points and application settings.
 
 **Priority**: MUST  
 **Verification**: Verify data persists across app restarts on both platforms
@@ -97,7 +97,7 @@ The application SHALL use Hive for cross-platform data persistence, storing surv
 
 **Given** application is running on iPhone  
 **When** a new survey point is saved  
-**Then** data is persisted to Hive box  
+**Then** data is persisted to Draft box  
 **And** data survives application restart  
 **And** data can be retrieved with all fields intact
 
@@ -105,7 +105,7 @@ The application SHALL use Hive for cross-platform data persistence, storing surv
 
 **Given** application is running on Android device  
 **When** a new survey point is saved  
-**Then** data is persisted to Hive box  
+**Then** data is persisted to Draft box  
 **And** data survives application restart  
 **And** data can be retrieved with all fields intact
 
@@ -235,7 +235,7 @@ None (this is a new capability)
 - Dart SDK 3.10+
 - sensors_plus 7.0.0 (requires Flutter >=3.19.0, iOS >=12.0)
 - flutter_compass 0.8.1
-- hive 2.2.3 (with hive_flutter for Flutter integration)
+- Draft
 - provider 6.1.5+
 - share_plus (latest)
 - path_provider (latest)

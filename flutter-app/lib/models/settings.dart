@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'dart:math';
+import 'dart:convert';
 
 /// Application settings model
 class Settings extends ChangeNotifier {
@@ -86,5 +87,15 @@ class Settings extends ChangeNotifier {
       surveyName: json['surveyName'] as String? ?? 'survey',
       keepScreenOn: json['keepScreenOn'] as bool? ?? true,
     );
+  }
+
+  // JSON string serialization for SharedPreferences
+  String toJsonString() {
+    return jsonEncode(toJson());
+  }
+
+  factory Settings.fromJsonString(String jsonString) {
+    final json = jsonDecode(jsonString) as Map<String, dynamic>;
+    return Settings.fromJson(json);
   }
 }

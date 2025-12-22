@@ -1,17 +1,47 @@
+import 'package:drift/drift.dart';
+
+part 'survey_data.g.dart';
+
+/// Survey data table definition for Drift
+class SurveyDataTable extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get recordNumber => integer().unique()();
+  RealColumn get distance => real()();
+  RealColumn get heading => real()();
+  RealColumn get depth => real()();
+  RealColumn get left => real().withDefault(const Constant(0.0))();
+  RealColumn get right => real().withDefault(const Constant(0.0))();
+  RealColumn get up => real().withDefault(const Constant(0.0))();
+  RealColumn get down => real().withDefault(const Constant(0.0))();
+  TextColumn get rtype => text()();
+  DateTimeColumn get timestamp => dateTime()();
+}
+
+/// Survey database using Drift
+@DriftDatabase(tables: [SurveyDataTable])
+class SurveyDatabase extends _$SurveyDatabase {
+  SurveyDatabase(QueryExecutor e) : super(e);
+
+  @override
+  int get schemaVersion => 1;
+}
+
 /// Survey data point model matching Swift SavedData struct
 class SurveyData {
-  final int recordNumber; // Sequential point ID
-  final double distance; // Cumulative meters from start
-  final double heading; // Magnetic degrees (0-360)
-  final double depth; // Meters (manually adjusted)
-  final double left; // Passage width left (manual points only)
-  final double right; // Passage width right
-  final double up; // Passage height up
-  final double down; // Passage height down
-  final String rtype; // "auto" or "manual"
-  final DateTime timestamp; // When point was recorded
+  final int? id;
+  final int recordNumber;
+  final double distance;
+  final double heading;
+  final double depth;
+  final double left;
+  final double right;
+  final double up;
+  final double down;
+  final String rtype;
+  final DateTime timestamp;
 
-  const SurveyData({
+  SurveyData({
+    this.id,
     required this.recordNumber,
     required this.distance,
     required this.heading,
@@ -24,7 +54,40 @@ class SurveyData {
     required this.timestamp,
   });
 
-  /// Create from JSON (for Hive storage and migration)
+  /// Create from Drift data object
+  factory SurveyData.fromDrift(SurveyDataTableData data) {
+    return SurveyData(
+      id: data.id,
+      recordNumber: data.recordNumber,
+      distance: data.distance,
+      heading: data.heading,
+      depth: data.depth,
+      left: data.left,
+      right: data.right,
+      up: data.up,
+      down: data.down,
+      rtype: data.rtype,
+      timestamp: data.timestamp,
+    );
+  }
+
+  /// Convert to Drift companion for inserts/updates
+  SurveyDataTableCompanion toDriftCompanion() {
+    return SurveyDataTableCompanion.insert(
+      recordNumber: recordNumber,
+      distance: distance,
+      heading: heading,
+      depth: depth,
+      left: Value(left),
+      right: Value(right),
+      up: Value(up),
+      down: Value(down),
+      rtype: rtype,
+      timestamp: timestamp,
+    );
+  }
+
+  /// Create from JSON (for migration and import)
   factory SurveyData.fromJson(Map<String, dynamic> json) {
     return SurveyData(
       recordNumber: json['recordNumber'] as int,
@@ -58,6 +121,7 @@ class SurveyData {
 
   /// Create a copy with updated fields
   SurveyData copyWith({
+    int? id,
     int? recordNumber,
     double? distance,
     double? heading,
@@ -70,6 +134,7 @@ class SurveyData {
     DateTime? timestamp,
   }) {
     return SurveyData(
+      id: id ?? this.id,
       recordNumber: recordNumber ?? this.recordNumber,
       distance: distance ?? this.distance,
       heading: heading ?? this.heading,

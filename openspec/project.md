@@ -16,7 +16,7 @@ The app creates survey data points that can be exported as CSV or Therion format
 - **Framework**: Flutter 3.38+
 - **Platforms**: iOS 12.0+, Android 8.0+ (API 26+)
 - **State Management**: Provider pattern with ChangeNotifier services
-- **Data Storage**: Hive (NoSQL key-value database)
+- **Data Storage**: Drift (type-safe SQLite wrapper) + SharedPreferences
 - **Hardware**: 3D-printed wheel device with 8mm magnet, rubber band clamp
 - **Export Formats**: CSV, Therion survey format
 - **Python Tools**: PointCloud2Map.py for 3D point cloud analysis
@@ -25,7 +25,8 @@ The app creates survey data points that can be exported as CSV or Therion format
 
 - `sensors_plus 7.0.0` - Magnetometer access
 - `flutter_compass 0.8.1` - Compass heading
-- `hive 2.2.3` + `hive_flutter` - Local storage
+- `drift 2.30.0` + `sqlite3_flutter_libs` - SQLite database
+- `shared_preferences 2.5.4` - Simple key-value storage
 - `provider 6.1.5` - State management
 - `share_plus` - Export functionality
 - `path_provider` - File system access
@@ -50,7 +51,7 @@ The app creates survey data points that can be exported as CSV or Therion format
 
 - **Provider Pattern**: Services extend `ChangeNotifier` for reactive state
 - **Service Layer**: Separate services for storage, sensors, and export
-- **Data Models**: Immutable data classes with Hive type adapters
+- **Data Models**: Immutable data classes with Drift table definitions
 - **Screen Components**: Separate files for each major screen
 - **Widget Composition**: Reusable widgets in `widgets/` directory
 - **Navigation**: Simple push/pop navigation with named routes
@@ -62,10 +63,10 @@ flutter-app/
 ├── lib/
 │   ├── main.dart              # App entry point
 │   ├── models/                # Data models
-│   │   ├── survey_data.dart   # Survey point model + Hive adapter
+│   │   ├── survey_data.dart   # Survey point model + Drift table
 │   │   └── settings.dart      # App settings model
 │   ├── services/              # Business logic
-│   │   ├── storage_service.dart      # Hive persistence
+│   │   ├── storage_service.dart      # Drift + SharedPreferences persistence
 │   │   ├── magnetometer_service.dart # Distance measurement
 │   │   ├── compass_service.dart      # Heading tracking
 │   │   └── export_service.dart       # CSV/Therion export
@@ -122,7 +123,7 @@ class SurveyData {
 }
 ```
 
-**Hive Persistence**: Model uses `@HiveType` and `@HiveField` annotations for type-safe serialization.
+**Drift Persistence**: Model uses Drift table definitions with type-safe SQL queries and automatic serialization.
 
 **Archived Swift Model** (reference only):
 
@@ -200,7 +201,7 @@ struct SavedData: Codable {
 **Both Platforms**:
 
 - No cloud sync (local storage only)
-- Hive database for data persistence
+- SQLite database (via Drift) for data persistence
 - Flutter 3.38+ for building
 
 ### Data Export Formats
@@ -215,7 +216,9 @@ struct SavedData: Codable {
 
 - **sensors_plus**: Magnetometer and accelerometer data
 - **flutter_compass**: Compass heading with calibration
-- **hive / hive_flutter**: NoSQL local database
+- **drift**: Type-safe SQLite database wrapper
+- **sqlite3_flutter_libs**: SQLite native libraries
+- **shared_preferences**: Simple key-value storage
 - **provider**: State management and dependency injection
 - **share_plus**: Cross-platform sharing functionality
 - **path_provider**: Access to file system directories
@@ -243,7 +246,7 @@ Essential for underwater usability with thick waterproof cases:
 
 - Reposition and resize all interface buttons
 - Separate layouts for different screens
-- Settings persist via Hive storage
+- Settings persist via SharedPreferences
 - Accommodates limited touch precision underwater
 
 ### Compass Calibration
@@ -258,18 +261,18 @@ Essential for underwater usability with thick waterproof cases:
 - Point numbers auto-increment and persist
 - Last depth/distance values carried forward to new manual points
 - Reset functionality for starting new surveys
-- All data stored locally in Hive database
+- All data stored locally in SQLite database (via Drift)
 - No cloud sync or backup (intentional design decision)
 
 ## Service Architecture
 
-### StorageService (Hive-based)
+### StorageService (Drift + SharedPreferences)
 
-- Manages survey data persistence
-- Type-safe serialization with `SurveyData` adapter
-- Lazy box loading for performance
-- Settings storage for app configuration
-- Migration support for data model changes
+- Manages survey data persistence in SQLite database
+- Type-safe SQL queries via Drift code generation
+- SharedPreferences for app settings and button configs
+- Reactive updates via ChangeNotifier
+- Migration support for schema changes
 
 ### MagnetometerService
 
@@ -316,7 +319,7 @@ The project demonstrates successful AI-assisted development of a specialized dom
 
 - Preserves all core functionality from Swift version
 - Adds Android platform support
-- Modernizes data persistence with Hive
+- Modernizes data persistence with Draft
 - Uses Provider pattern for cleaner state management
 - Maintains underwater usability focus
 - Original Swift code archived for reference
@@ -335,8 +338,8 @@ The project demonstrates successful AI-assisted development of a specialized dom
 
 #### Adding Survey Data Fields
 
-1. Update `SurveyData` model (`flutter-app/lib/models/survey_data.dart`)
-2. Update Hive `TypeAdapter` annotations
+1. Update `SurveyDataTable` in `flutter-app/lib/models/survey_data.dart`
+2. Run `dart run build_runner build` to regenerate Drift code
 3. Modify `ExportService` for CSV/Therion export
 4. Update relevant UI screens
 5. Create data migration if needed

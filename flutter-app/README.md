@@ -34,7 +34,7 @@ CaveDiveMap is a cross-platform rewrite of the iOS-only CaveDiveMap application.
 lib/
 ├── models/          # Data models (SurveyData)
 ├── services/        # Business logic services
-│   ├── storage_service.dart       # Hive persistence
+│   ├── storage_service.dart       # Data persistence
 │   ├── magnetometer_service.dart  # Distance measurement
 │   ├── compass_service.dart       # Heading tracking
 │   └── export_service.dart        # CSV/Therion export
@@ -46,7 +46,7 @@ lib/
 ### Tech Stack
 
 - **State Management**: Provider (ChangeNotifier pattern)
-- **Storage**: Hive (NoSQL key-value database with automatic persistence)
+- **Storage**: Drift (type-safe SQLite wrapper) + SharedPreferences for settings
 - **Sensors**: sensors_plus, flutter_compass
 - **Export**: share_plus, path_provider
 

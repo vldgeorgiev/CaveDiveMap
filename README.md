@@ -82,7 +82,7 @@ flutter run
 
 - `sensors_plus 7.0.0` - Magnetometer access
 - `flutter_compass 0.8.1` - Compass heading
-- `hive 2.2.3` - Local storage (NoSQL database)
+- `drift` - Local storage database
 - `provider 6.1.5` - State management
 - `share_plus` - Export functionality
 

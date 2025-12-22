@@ -68,9 +68,9 @@
 - BLoC: Unnecessary ceremony for sensor data streaming
 - GetX: Magic strings and global state unsuitable for maintainable code
 
-### Storage: Hive
+### Storage: Draft
 
-**Selected**: Hive 2.2.3 (NoSQL key-value/document database)
+**Selected**: Draft database
 
 **Rationale**:
 1. **Type Safety**: TypeAdapter ensures compile-time guarantees
@@ -150,7 +150,7 @@ class SurveyData {
 **Rationale**:
 1. **Thread Safety**: Immutable objects safe for sensor callbacks
 2. **Predictability**: No unexpected mutations
-3. **Hive Compatibility**: Works well with Hive's object storage
+3. **Draft Compatibility**: Works well with Draft's object storage
 4. **Debugging**: Easier to track state changes
 
 **Trade-offs**:
@@ -300,12 +300,12 @@ class MapCanvas extends CustomPainter {
 **Decision**: On-demand migration on first app launch
 
 **Flow**:
-1. Check for existing Hive data
+1. Check for existing Draft data
 2. If none, check for migration marker file
 3. Prompt user to import from old app
 4. User exports JSON from Swift app
 5. User imports JSON in Flutter app
-6. Validate and convert to Hive
+6. Validate and convert to Draft
 
 **Rationale**:
 1. **User Control**: User decides when to migrate
@@ -338,7 +338,7 @@ class MapCanvas extends CustomPainter {
 
 ### Data Storage
 
-**Decision**: Unencrypted Hive boxes by default, optional encryption in settings
+**Decision**: Unencrypted Draft boxes by default, optional encryption in settings
 
 **Rationale**:
 1. **Performance**: Encryption adds overhead

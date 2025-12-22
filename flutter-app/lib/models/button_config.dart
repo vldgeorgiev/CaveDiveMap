@@ -1,17 +1,7 @@
-import 'package:hive/hive.dart';
-
-part 'button_config.g.dart';
-
 /// Configuration for a single button's appearance and position
-@HiveType(typeId: 2)
 class ButtonConfig {
-  @HiveField(0)
   final double size;
-
-  @HiveField(1)
   final double offsetX;
-
-  @HiveField(2)
   final double offsetY;
 
   const ButtonConfig({

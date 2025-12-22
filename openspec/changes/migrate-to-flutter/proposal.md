@@ -46,7 +46,7 @@ Create a new cross-platform CaveDiveMap application using Flutter in a separate 
 - Compass/heading service with calibration
 - Automatic survey point generation
 - Manual survey point entry with cyclic parameter editing
-- Data persistence (Hive instead of UserDefaults)
+- Data persistence (Draft instead of UserDefaults)
 - CSV and Therion export functionality
 - 2D map visualization with custom painting
 - Button customization system
@@ -81,7 +81,7 @@ Create a new cross-platform CaveDiveMap application using Flutter in a separate 
 - **Framework**: Flutter 3.38+ (stable as of Dec 2025)
 - **Language**: Dart 3.10+
 - **State Management**: Provider 6.1.5+
-- **Storage**: Hive 2.2.3 (or Isar 4.x for future enhancements)
+- **Storage**: Draft 2.2.3 (or Isar 4.x for future enhancements)
 - **Sensors**: sensors_plus 7.0.0, flutter_compass 0.8.1
 - **Build System**: Flutter build tools (iOS: Xcode, Android: Gradle)
 
@@ -94,7 +94,7 @@ SwiftUI Views → ViewModels → DataManager (UserDefaults)
 
 **To (Flutter Provider Pattern):**
 ```
-Flutter Widgets → Services (ChangeNotifier) → StorageService (Hive)
+Flutter Widgets → Services (ChangeNotifier) → StorageService (Draft)
 ```
 
 ### Key Mappings
@@ -103,7 +103,7 @@ Flutter Widgets → Services (ChangeNotifier) → StorageService (Hive)
 |-----------|---------|----------------|
 | CoreMotion magnetometer | MagnetometerEvent | sensors_plus |
 | CoreLocation heading | CompassEvent | flutter_compass |
-| UserDefaults | Box<T> | hive |
+| UserDefaults | Box<T> | Draft |
 | @StateObject/@ObservedObject | ChangeNotifier + Provider | provider |
 | NavigationStack | Navigator 2.0 | built-in |
 | Share sheet | Share.share() | share_plus |
@@ -113,7 +113,7 @@ Flutter Widgets → Services (ChangeNotifier) → StorageService (Hive)
 
 1. Export existing UserDefaults data to JSON
 2. Create migration script (Dart or Python)
-3. Import JSON into Hive boxes on first launch
+3. Import JSON into Draft boxes on first launch
 4. Provide manual export/import for users
 
 ### Risk Mitigation
@@ -231,6 +231,6 @@ See `tasks.md` for detailed task breakdown.
 
 - Flutter sensors_plus: https://pub.dev/packages/sensors_plus
 - Flutter compass: https://pub.dev/packages/flutter_compass
-- Hive documentation: https://docs.hivedb.dev/
+- Draft documentation: https://docs.hivedb.dev/
 - Provider pattern: https://pub.dev/packages/provider
 - Flutter platform channels: https://docs.flutter.dev/platform-integration/platform-channels

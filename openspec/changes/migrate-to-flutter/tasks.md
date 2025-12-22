@@ -30,7 +30,7 @@
 - [x] Configure iOS deployment target (iOS 12.0+)
 - [x] Configure Android minimum SDK (API 26 / Android 8.0+)
 - [x] Set up project structure (lib/models, lib/services, lib/screens, lib/widgets)
-- [x] Add dependencies to pubspec.yaml (sensors_plus 7.0.0, flutter_compass 0.8.1, hive 2.2.3, provider 6.1.5, share_plus)
+- [x] Add dependencies to pubspec.yaml (sensors_plus 7.0.0, flutter_compass 0.8.1, Draft, provider 6.1.5, share_plus)
 - [ ] Configure app icons and splash screens for both platforms
 - [x] Set up code signing for iOS (new bundle ID: com.cavedivemap.flutter, different from Swift app's CaveDiveMap)
 - [x] Configure Android build.gradle with unique application ID (com.cavedivemap.flutter)
@@ -38,15 +38,15 @@
 
 ### Data Models
 - [x] Create `SurveyData` model matching Swift SavedData struct
-- [x] Add Hive TypeAdapter for SurveyData serialization
+- [x] Add Draft TypeAdapter for SurveyData serialization
 - [x] Create `Settings` model for app configuration
 - [ ] Create `ButtonSettings` model for UI customization
-- [ ] Add Hive TypeAdapter for ButtonSettings
+- [ ] Add Draft TypeAdapter for ButtonSettings
 - [ ] Write unit tests for model serialization/deserialization
 
 ### Storage Service
 - [x] Implement `StorageService` class
-- [x] Initialize Hive and open boxes
+- [x] Initialize Draft and open boxes
 - [x] Implement `saveSurveyPoint(SurveyData)` method
 - [x] Implement `getAllSurveyData()` method
 - [x] Implement point counter tracking methods
@@ -124,7 +124,7 @@
 ### Button Customization System
 - [ ] Create `ButtonCustomizationSettings` class (singleton or service)
 - [ ] Implement position and size properties for all buttons
-- [ ] Add persistence to Hive/SharedPreferences
+- [ ] Add persistence to Draft/SharedPreferences
 - [ ] Create `CustomizableButton` widget
 - [ ] Implement drag-to-reposition functionality
 - [ ] Implement pinch-to-resize functionality (or sliders)
@@ -231,7 +231,7 @@
 ### Data Migration
 
 - [ ] Create Swift script to export UserDefaults to JSON
-- [ ] Create Dart migration script to import JSON to Hive
+- [ ] Create Dart migration script to import JSON to Draft
 - [ ] Test migration with real survey data from Swift app
 - [ ] Add first-launch import flow in Flutter app (user selects JSON file)
 - [ ] Test migration failure scenarios and rollback
