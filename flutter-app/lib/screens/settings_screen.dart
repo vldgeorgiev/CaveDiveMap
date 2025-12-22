@@ -8,6 +8,7 @@ import '../services/storage_service.dart';
 import '../services/export_service.dart';
 import '../services/magnetometer_service.dart';
 import '../services/compass_service.dart';
+import '../services/rotation_detection/rotation_algorithm.dart';
 import '../utils/theme_extensions.dart';
 import '../widgets/info_card.dart';
 import '../widgets/monospaced_text.dart';
@@ -407,38 +408,83 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Sensor Configuration Section
-            _buildSectionHeader('Sensor Configuration'),
+            // Rotation Detection Algorithm Section
+            _buildSectionHeader('Rotation Detection Algorithm'),
             const SizedBox(height: 8),
-            InfoCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildTextField(
-                    controller: _minPeakThresholdController,
-                    label: 'Min Peak Threshold (μT)',
-                    hint: '50',
-                    keyboardType: TextInputType.number,
+            Consumer2<Settings, MagnetometerService>(
+              builder: (context, settings, magnetometer, child) {
+                return InfoCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildAlgorithmSelector(settings, magnetometer),
+                      if (settings.rotationAlgorithm == RotationAlgorithm.threshold) ...[
+                        const Divider(height: 24),
+                        _buildTextField(
+                          controller: _minPeakThresholdController,
+                          label: 'Min Peak Threshold (μT)',
+                          hint: '50',
+                          keyboardType: TextInputType.number,
+                        ),
+                        const SizedBox(height: 8),
+                        _buildTextField(
+                          controller: _maxPeakThresholdController,
+                          label: 'Max Peak Threshold (μT)',
+                          hint: '200',
+                          keyboardType: TextInputType.number,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Magnetic field range for peak detection',
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.textSecondary,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                      if (settings.rotationAlgorithm == RotationAlgorithm.pca) ...[
+                        const Divider(height: 24),
+                        _buildSignalQualityIndicator(magnetometer),
+                      ],
+                    ],
                   ),
-                  const SizedBox(height: 8),
-                  _buildTextField(
-                    controller: _maxPeakThresholdController,
-                    label: 'Max Peak Threshold (μT)',
-                    hint: '200',
-                    keyboardType: TextInputType.number,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Magnetic field range for wheel rotation detection',
-                    style: AppTextStyles.caption.copyWith(
-                      color: AppColors.textSecondary,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                ],
-              ),
+                );
+              },
             ),
             const SizedBox(height: 16),
+
+            // Sensor Configuration Section (removed - moved into algorithm section)
+            // _buildSectionHeader('Sensor Configuration'),
+            // const SizedBox(height: 8),
+            // InfoCard(
+            //   child: Column(
+            //     crossAxisAlignment: CrossAxisAlignment.start,
+            //     children: [
+            //       _buildTextField(
+            //         controller: _minPeakThresholdController,
+            //         label: 'Min Peak Threshold (μT)',
+            //         hint: '50',
+            //         keyboardType: TextInputType.number,
+            //       ),
+            //       const SizedBox(height: 8),
+            //       _buildTextField(
+            //         controller: _maxPeakThresholdController,
+            //         label: 'Max Peak Threshold (μT)',
+            //         hint: '200',
+            //         keyboardType: TextInputType.number,
+            //       ),
+            //       const SizedBox(height: 2),
+            //       Text(
+            //         'Magnetic field range for wheel rotation detection',
+            //         style: AppTextStyles.caption.copyWith(
+            //           color: AppColors.textSecondary,
+            //           fontStyle: FontStyle.italic,
+            //         ),
+            //       ),
+            //     ],
+            //   ),
+            // ),
+            // const SizedBox(height: 16),
 
             // Live Magnetometer Section
             _buildSectionHeader('Magnetic Field Readout'),
@@ -783,6 +829,174 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildAlgorithmSelector(Settings settings, MagnetometerService magnetometer) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Detection Method',
+          style: AppTextStyles.body.copyWith(
+            color: AppColors.textSecondary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        ...RotationAlgorithm.values.map((algorithm) {
+          final isSelected = settings.rotationAlgorithm == algorithm;
+          return RadioListTile<RotationAlgorithm>(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            title: Text(
+              _getAlgorithmName(algorithm),
+              style: AppTextStyles.body.copyWith(
+                color: AppColors.textPrimary,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+            subtitle: Text(
+              _getAlgorithmDescription(algorithm),
+              style: AppTextStyles.caption.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+            value: algorithm,
+            groupValue: settings.rotationAlgorithm,
+            activeColor: AppColors.actionSave,
+            onChanged: (value) async {
+              if (value != null) {
+                settings.updateRotationAlgorithm(value);
+                magnetometer.setAlgorithm(value);
+                final storageService = context.read<StorageService>();
+                await storageService.saveSettings(settings);
+              }
+            },
+          );
+        }).toList(),
+      ],
+    );
+  }
+
+  String _getAlgorithmName(RotationAlgorithm algorithm) {
+    switch (algorithm) {
+      case RotationAlgorithm.threshold:
+        return 'Threshold (Legacy)';
+      case RotationAlgorithm.pca:
+        return 'PCA Phase Tracking (New)';
+    }
+  }
+
+  String _getAlgorithmDescription(RotationAlgorithm algorithm) {
+    switch (algorithm) {
+      case RotationAlgorithm.threshold:
+        return 'Magnitude-based peak detection. Requires manual tuning.';
+      case RotationAlgorithm.pca:
+        return 'Orientation-independent phase tracking. Zero configuration.';
+    }
+  }
+
+  Widget _buildSignalQualityIndicator(MagnetometerService magnetometer) {
+    final quality = magnetometer.signalQuality;
+    final percentage = (quality * 100).round();
+
+    Color qualityColor;
+    String qualityText;
+
+    if (quality >= 0.7) {
+      qualityColor = AppColors.statusGood;
+      qualityText = 'Excellent';
+    } else if (quality >= 0.5) {
+      qualityColor = Colors.blue;
+      qualityText = 'Good';
+    } else if (quality >= 0.3) {
+      qualityColor = Colors.orange;
+      qualityText = 'Fair';
+    } else {
+      qualityColor = Colors.red;
+      qualityText = 'Poor';
+    }
+
+    final pcaDetector = magnetometer.pcaDetector;
+    final validity = pcaDetector?.latestValidity;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Signal Quality',
+              style: AppTextStyles.body.copyWith(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            Text(
+              '$qualityText ($percentage%)',
+              style: AppTextStyles.body.copyWith(
+                color: qualityColor,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        LinearProgressIndicator(
+          value: quality,
+          backgroundColor: AppColors.backgroundSecondary,
+          valueColor: AlwaysStoppedAnimation<Color>(qualityColor),
+          minHeight: 8,
+        ),
+        if (validity != null && magnetometer.isRecording) ...[
+          const SizedBox(height: 12),
+          Text(
+            'Quality Checks',
+            style: AppTextStyles.caption.copyWith(
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          _buildQualityCheck('Planar Signal', validity.isPlanar),
+          _buildQualityCheck('Strong Signal', validity.hasStrongSignal),
+          _buildQualityCheck('Valid Frequency', validity.isWithinFrequencyLimit),
+          _buildQualityCheck('Phase Motion', validity.hasPhaseMotion),
+        ] else ...[
+          const SizedBox(height: 8),
+          Text(
+            'Start recording to see live quality metrics',
+            style: AppTextStyles.caption.copyWith(
+              color: AppColors.textSecondary,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildQualityCheck(String label, bool passed, [String? value]) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Icon(
+            passed ? Icons.check_circle : Icons.cancel,
+            size: 16,
+            color: passed ? AppColors.statusGood : Colors.red,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: AppTextStyles.caption.copyWith(
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
