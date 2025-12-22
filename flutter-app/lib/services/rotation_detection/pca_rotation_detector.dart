@@ -20,6 +20,12 @@ class PCARotationConfig {
   /// Baseline removal alpha (EMA smoothing factor).
   final double baselineAlpha;
 
+  /// Baseline removal alpha to use when signal is strong but phase motion is low
+  /// (brief stop/slowdown). Using a much smaller alpha prevents the baseline
+  /// filter from absorbing the stationary magnet field and losing the signal
+  /// when rotation resumes.
+  final double pausedBaselineAlpha;
+
   /// Validity gate configuration.
   final ValidityGateConfig validityConfig;
 
@@ -27,6 +33,7 @@ class PCARotationConfig {
     this.samplingRateHz = 100.0,
     this.windowSizeSeconds = 2.0,
     this.baselineAlpha = 0.01,
+    this.pausedBaselineAlpha = 0.001,
     this.validityConfig = const ValidityGateConfig(),
   });
 }
@@ -91,7 +98,18 @@ class PCARotationDetector extends ChangeNotifier {
     if (!_isActive) return;
 
     // Step 1: Remove baseline (Earth's field + drift)
-    final corrected = _baselineRemoval.removeBaseline(reading);
+    // IMPORTANT: during brief pauses, the magnet field can become a constant
+    // offset and a fast baseline filter (alpha≈0.01) will adapt to it within
+    // ~1s, effectively erasing the magnet signal. Slow baseline adaptation
+    // during these pauses to improve interrupted-rotation counting.
+    final lastValidity = _latestValidity;
+    final shouldSlowBaseline = lastValidity != null &&
+        lastValidity.hasStrongSignal &&
+        !lastValidity.hasPhaseMotion;
+    final corrected = _baselineRemoval.removeBaseline(
+      reading,
+      alphaOverride: shouldSlowBaseline ? config.pausedBaselineAlpha : null,
+    );
 
     // Debug: Log raw and corrected values occasionally
     _debugSampleCount++;
@@ -128,7 +146,13 @@ class PCARotationDetector extends ChangeNotifier {
     final phase = _phaseComputer.computePhase(projected);
 
     // Step 6: Unwrap phase and detect rotations
-    final phaseChange = phase - _lastPhase;
+    // Use wrap-corrected delta for gates (frequency/motion) to avoid spikes at ±π.
+    double phaseChange = phase - _lastPhase;
+    if (phaseChange > 3.141592653589793) {
+      phaseChange -= 2 * 3.141592653589793;
+    } else if (phaseChange < -3.141592653589793) {
+      phaseChange += 2 * 3.141592653589793;
+    }
     final unwrappedPhase = _phaseUnwrapper.unwrap(phase);
     final rotCountBefore = _phaseUnwrapper.rotationCount;
     _lastPhase = phase;
@@ -145,7 +169,6 @@ class PCARotationDetector extends ChangeNotifier {
     _latestValidity = _validityGates.check(_latestPCA, phaseChange);
 
     // Debug: Log PCA metrics every 50 samples
-    _debugSampleCount++;
     if (_debugSampleCount % 50 == 0) {
       final eigenvalues = _latestPCA!.eigenvalues;
       final isSaturated = _latestPCA!.signalStrength > 10000.0;
@@ -227,6 +250,7 @@ class PCARotationDetector extends ChangeNotifier {
   /// Reset all state (rotation count, buffers, etc.).
   void reset() {
     _rotationCount = 0;
+    _maxAbsRotationCount = 0;
     _latestPCA = null;
     _latestValidity = null;
     _lastPhase = 0.0;

@@ -112,8 +112,10 @@ class PhaseUnwrapper {
     _totalPhase += delta;
     _lastWrappedPhase = wrappedPhase;
 
-    // Count complete rotations (remove abs() to preserve direction)
-    _rotationCount = (_totalPhase / (2 * pi)).floor();
+    // Count complete rotations.
+    // Use truncation toward zero instead of floor to avoid premature negative
+    // counts when _totalPhase is between 0 and -2π.
+    _rotationCount = (_totalPhase / (2 * pi)).truncate();
 
     return _totalPhase;
   }

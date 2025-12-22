@@ -16,9 +16,22 @@ class BaselineRemoval {
 
   BaselineRemoval({this.alpha = 0.01});
 
-  /// Remove baseline from raw magnetometer reading
-  /// Returns baseline-subtracted signal
-  Vector3 removeBaseline(Vector3 reading) {
+  /// Remove baseline from raw magnetometer reading.
+  ///
+  /// By default, updates the baseline using the configured EMA [alpha].
+  ///
+  /// When the wheel/magnet is stationary for a short period, the raw field can
+  /// become a near-constant offset. If we keep adapting the baseline at the
+  /// normal rate, the baseline will quickly absorb that offset and erase the
+  /// magnet signal, which can cause missed counts when rotation resumes.
+  ///
+  /// Use [freezeBaseline] (or a much smaller [alphaOverride]) during brief
+  /// pauses to preserve the magnet signal geometry.
+  Vector3 removeBaseline(
+    Vector3 reading, {
+    bool freezeBaseline = false,
+    double? alphaOverride,
+  }) {
     if (!_initialized) {
       // Initialize baseline to first reading
       _baselineX = reading.x;
@@ -28,10 +41,14 @@ class BaselineRemoval {
       return Vector3.zero; // First sample returns zero
     }
 
-    // Update baseline with exponential moving average
-    _baselineX = alpha * reading.x + (1 - alpha) * _baselineX;
-    _baselineY = alpha * reading.y + (1 - alpha) * _baselineY;
-    _baselineZ = alpha * reading.z + (1 - alpha) * _baselineZ;
+    if (!freezeBaseline) {
+      final effectiveAlpha = alphaOverride ?? alpha;
+
+      // Update baseline with exponential moving average
+      _baselineX = effectiveAlpha * reading.x + (1 - effectiveAlpha) * _baselineX;
+      _baselineY = effectiveAlpha * reading.y + (1 - effectiveAlpha) * _baselineY;
+      _baselineZ = effectiveAlpha * reading.z + (1 - effectiveAlpha) * _baselineZ;
+    }
 
     // Return baseline-subtracted signal
     return Vector3(
