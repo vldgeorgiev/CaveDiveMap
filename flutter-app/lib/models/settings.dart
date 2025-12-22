@@ -78,20 +78,8 @@ class Settings extends ChangeNotifier {
   }
 
   factory Settings.fromJson(Map<String, dynamic> json) {
-    // Support legacy 'wheelCircumference' for migration
-    double diameter;
-    if (json.containsKey('wheelDiameter')) {
-      diameter = json['wheelDiameter'] as double? ?? 0.0837;
-    } else if (json.containsKey('wheelCircumference')) {
-      // Migrate old circumference to diameter
-      final circumference = json['wheelCircumference'] as double? ?? 0.263;
-      diameter = circumference / pi;
-    } else {
-      diameter = 0.0837;
-    }
-
     return Settings(
-      wheelDiameter: diameter,
+      wheelDiameter: json['wheelDiameter'] as double? ?? 0.043,
       minPeakThreshold: json['minPeakThreshold'] as double? ?? 50.0,
       maxPeakThreshold: json['maxPeakThreshold'] as double? ?? 100.0,
       surveyName: json['surveyName'] as String? ?? 'survey',
