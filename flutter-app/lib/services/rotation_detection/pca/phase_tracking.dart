@@ -120,6 +120,30 @@ class PhaseUnwrapper {
     return _totalPhase;
   }
 
+  /// Advance the unwrapped phase by a signed, wrap-corrected delta.
+  ///
+  /// [delta] should be the signed smallest-angle change in [-π, π].
+  /// This is robust against atan2 wrapping and avoids eigenvector sign-flip
+  /// spikes when paired with a stabilized PCA basis.
+  double advanceDelta(double delta) {
+    if (_isFirstSample) {
+      _isFirstSample = false;
+      _lastWrappedPhase = 0.0;
+      _totalPhase = 0.0;
+    }
+
+    // Clamp extreme values defensively.
+    if (delta > pi) {
+      delta -= 2 * pi;
+    } else if (delta < -pi) {
+      delta += 2 * pi;
+    }
+
+    _totalPhase += delta;
+    _rotationCount = (_totalPhase / (2 * pi)).truncate();
+    return _totalPhase;
+  }
+
   /// Get current total unwrapped phase.
   double get totalPhase => _totalPhase;
 

@@ -964,6 +964,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildQualityCheck('Strong Signal', validity.hasStrongSignal),
           _buildQualityCheck('Valid Frequency', validity.isWithinFrequencyLimit),
           _buildQualityCheck('Phase Motion', validity.hasPhaseMotion),
+          _buildQualityCheck('Coherent Motion', validity.hasCoherentMotion),
         ] else ...[
           const SizedBox(height: 8),
           Text(

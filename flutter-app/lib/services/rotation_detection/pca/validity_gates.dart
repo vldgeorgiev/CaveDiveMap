@@ -45,6 +45,17 @@ class ValidityGateConfig {
   /// Default: 0.0001 rad/sample - extremely low threshold for very slow rotations
   final double minPhaseChangePerSample;
 
+  /// Minimum coherence of signed phase motion.
+  ///
+  /// Coherence is computed over a recent window as:
+  ///   coherence = |ΣΔθ| / Σ|Δθ|  in [0,1]
+  ///
+  /// - 1.0 means consistent direction
+  /// - 0.0 means rapidly changing direction (e.g., figure-8 phone movement)
+  ///
+  /// Default: 0.70
+  final double minCoherence;
+
   const ValidityGateConfig({
     this.maxFlatness = 0.20,
     this.flatnessHysteresis = 0.05,
@@ -52,6 +63,7 @@ class ValidityGateConfig {
     this.maxSignalStrength = 10000.0,
     this.maxRotationFrequencyHz = 10.0,
     this.minPhaseChangePerSample = 0.0001,
+    this.minCoherence = 0.70,
   });
 }
 
@@ -65,6 +77,7 @@ class ValidityGateResult {
   final bool hasStrongSignal;
   final bool isWithinFrequencyLimit;
   final bool hasPhaseMotion;
+  final bool hasCoherentMotion;
 
   /// Signal quality score [0.0, 1.0] for UI feedback.
   ///
@@ -80,6 +93,7 @@ class ValidityGateResult {
     required this.hasStrongSignal,
     required this.isWithinFrequencyLimit,
     required this.hasPhaseMotion,
+    required this.hasCoherentMotion,
     required this.qualityScore,
   });
 
@@ -90,6 +104,7 @@ class ValidityGateResult {
       'hasStrongSignal: $hasStrongSignal, '
       'withinFreqLimit: $isWithinFrequencyLimit, '
       'hasMotion: $hasPhaseMotion, '
+      'coherent: $hasCoherentMotion, '
       'quality: ${(qualityScore * 100).toStringAsFixed(0)}%'
       ')';
 }
@@ -115,12 +130,18 @@ class ValidityGates {
   final List<double> _recentFrequencies = [];
   static const int _frequencyHistorySize = 10;  // ~0.1s at 100Hz
 
+  // Coherence gate: track signed phase deltas
+  final List<double> _recentSignedPhaseDeltas = [];
+  static const int _coherenceHistorySize = 50; // 0.5s at 100Hz
+  static const double _coherenceEpsilon = 1e-4;
+
   // Debug state tracking
   int _qualityCheckCount = 0;
   bool _lastPlanarState = false;
   bool _lastSignalState = false;
   bool _lastFreqState = true;
   bool _lastMotionState = false;
+  bool _lastCoherenceState = false;
   bool _lastValidState = false;
 
   ValidityGates({
@@ -143,6 +164,7 @@ class ValidityGates {
         hasStrongSignal: false,
         isWithinFrequencyLimit: false,
         hasPhaseMotion: false,
+        hasCoherentMotion: false,
         qualityScore: 0.0,
       );
     }
@@ -199,15 +221,37 @@ class ValidityGates {
             'avgChange=${avgPhaseChange.toStringAsFixed(5)} (min=${config.minPhaseChangePerSample})');
     }
 
+    // Gate 5: Coherence of signed motion (reject direction-flipping patterns)
+    _recentSignedPhaseDeltas.add(phaseChange);
+    if (_recentSignedPhaseDeltas.length > _coherenceHistorySize) {
+      _recentSignedPhaseDeltas.removeAt(0);
+    }
+    double sum = 0.0;
+    double sumAbs = 0.0;
+    for (final d in _recentSignedPhaseDeltas) {
+      if (d.abs() < _coherenceEpsilon) continue;
+      sum += d;
+      sumAbs += d.abs();
+    }
+    final coherence = sumAbs > 0 ? (sum.abs() / sumAbs).clamp(0.0, 1.0) : 0.0;
+    final hasCoherentMotion = coherence >= config.minCoherence;
+    if (hasCoherentMotion != _lastCoherenceState) {
+      _lastCoherenceState = hasCoherentMotion;
+      print('[GATE-COHERENCE] Changed to ${hasCoherentMotion ? "PASS" : "FAIL"} | '
+            'coherence=${coherence.toStringAsFixed(2)} (min=${config.minCoherence.toStringAsFixed(2)})');
+    }
+
     // Compute quality score [0.0, 1.0]
     // Flatness: lower is better, so invert it (1.0 - flatness/0.33)
     final planarityScore = (1.0 - pca.flatness / 0.33).clamp(0.0, 1.0);
     final signalScore = (pca.signalStrength / 100.0).clamp(0.0, 1.0);
     final frequencyScore = isWithinFrequencyLimit ? 1.0 : 0.0;
+    final coherenceScore = coherence;
 
-    final qualityScore = 0.4 * planarityScore +
-                         0.4 * signalScore +
-                         0.2 * frequencyScore;
+    final qualityScore = 0.35 * planarityScore +
+               0.35 * signalScore +
+               0.20 * coherenceScore +
+               0.10 * frequencyScore;
 
     // Debug: Log quality breakdown occasionally
     _qualityCheckCount++;
@@ -220,9 +264,10 @@ class ValidityGates {
 
     // Overall validity: all gates must pass
     final isValid = isPlanar &&
-                   hasStrongSignal &&
-                   isWithinFrequencyLimit &&
-                   hasPhaseMotion;
+             hasStrongSignal &&
+             isWithinFrequencyLimit &&
+             hasPhaseMotion &&
+             hasCoherentMotion;
 
     final result = ValidityGateResult(
       isValid: isValid,
@@ -230,6 +275,7 @@ class ValidityGates {
       hasStrongSignal: hasStrongSignal,
       isWithinFrequencyLimit: isWithinFrequencyLimit,
       hasPhaseMotion: hasPhaseMotion,
+      hasCoherentMotion: hasCoherentMotion,
       qualityScore: qualityScore,
     );
 
@@ -239,7 +285,8 @@ class ValidityGates {
       print('[VALIDITY] Gates: Planar=${isPlanar}(flatness=${pca.flatness.toStringAsFixed(3)}) '
             'Signal=${hasStrongSignal}(${pca.signalStrength.toStringAsFixed(1)}) '
             'Freq=${isWithinFrequencyLimit}(${avgFrequencyHz.toStringAsFixed(2)}Hz) '
-            'Motion=${hasPhaseMotion}(${avgPhaseChange.toStringAsFixed(4)}) '
+        'Motion=${hasPhaseMotion}(${avgPhaseChange.toStringAsFixed(4)}) '
+        'Coherence=${hasCoherentMotion}(${coherence.toStringAsFixed(2)}) '
             '→ Valid=${isValid}');
     }
 
@@ -250,11 +297,13 @@ class ValidityGates {
   void reset() {
     _recentPhaseChanges.clear();
     _recentFrequencies.clear();
+    _recentSignedPhaseDeltas.clear();
     _lastValidState = false;
     _qualityCheckCount = 0;
     _lastPlanarState = false;
     _lastSignalState = false;
     _lastFreqState = true;
     _lastMotionState = false;
+    _lastCoherenceState = false;
   }
 }

@@ -1,4 +1,4 @@
-import 'dart:math' show sqrt;
+import 'dart:math' show sqrt, atan2;
 import 'package:flutter/foundation.dart';
 import 'vector3.dart';
 import 'vector2.dart';
@@ -17,6 +17,13 @@ class PCARotationConfig {
   /// Sliding window size in seconds for PCA computation.
   final double windowSizeSeconds;
 
+  /// Minimum fraction of the sliding window that must be populated before PCA
+  /// is computed. This reduces startup latency so early rotations aren't missed.
+  ///
+  /// Example: windowSizeSeconds=1.0 @ 100Hz => capacity≈100 samples.
+  /// minWindowFillFraction=0.5 => start after ≈50 samples (~0.5s).
+  final double minWindowFillFraction;
+
   /// Baseline removal alpha (EMA smoothing factor).
   final double baselineAlpha;
 
@@ -26,14 +33,20 @@ class PCARotationConfig {
   /// when rotation resumes.
   final double pausedBaselineAlpha;
 
+  /// How long (ms) we keep allowing counts after planarity briefly fails while
+  /// signal remains strong. This improves counting when rotation is jerky.
+  final int planarGraceMs;
+
   /// Validity gate configuration.
   final ValidityGateConfig validityConfig;
 
   const PCARotationConfig({
     this.samplingRateHz = 100.0,
-    this.windowSizeSeconds = 2.0,
+    this.windowSizeSeconds = 1.0,
+    this.minWindowFillFraction = 0.5,
     this.baselineAlpha = 0.01,
     this.pausedBaselineAlpha = 0.001,
+    this.planarGraceMs = 700,
     this.validityConfig = const ValidityGateConfig(),
   });
 }
@@ -73,6 +86,15 @@ class PCARotationDetector extends ChangeNotifier {
   bool _isActive = false;
   int _debugSampleCount = 0; // For debug logging throttle
   Vector2 _lastProjected = const Vector2(0, 0); // For debug output
+
+  int _lastPlanarStrongTimestampMs = 0;
+
+  // PCA basis stabilization (eigenvectors can flip sign and/or swap when
+  // eigenvalues are close). Keeping a continuous basis is critical for stable
+  // phase tracking, especially for slow or jerky motion.
+  Vector3? _prevPc1;
+  Vector3? _prevPc2;
+  Vector3? _prevNormal;
 
   PCARotationDetector({this.config = const PCARotationConfig()}) {
     _baselineRemoval = BaselineRemoval(alpha: config.baselineAlpha);
@@ -123,8 +145,12 @@ class PCARotationDetector extends ChangeNotifier {
     // Step 2: Add to sliding window
     _slidingWindow.add(corrected, timestamp);
 
-    // Wait until window is full
-    if (!_slidingWindow.isFull) {
+    // Wait until we have enough samples to compute a stable PCA.
+    final capacity = (config.windowSizeSeconds * config.samplingRateHz).round();
+    final minSamples = (capacity * config.minWindowFillFraction)
+        .clamp(3, capacity)
+        .round();
+    if (_slidingWindow.length < minSamples) {
       return;
     }
 
@@ -138,6 +164,9 @@ class PCARotationDetector extends ChangeNotifier {
       return;
     }
 
+    // Stabilize eigenvector basis to avoid phase resets/jumps.
+    _latestPCA = _stabilizePcaBasis(_latestPCA!);
+
     // Step 4: Project latest sample to rotation plane
     final projected = _projector.project(corrected, _latestPCA!);
     _lastProjected = projected;
@@ -146,7 +175,7 @@ class PCARotationDetector extends ChangeNotifier {
     final phase = _phaseComputer.computePhase(projected);
 
     // Step 6: Unwrap phase and detect rotations
-    // Use wrap-corrected delta for gates (frequency/motion) to avoid spikes at ±π.
+    // Use wrap-corrected delta for gates (frequency/motion/coherence).
     double phaseChange = phase - _lastPhase;
     if (phaseChange > 3.141592653589793) {
       phaseChange -= 2 * 3.141592653589793;
@@ -167,6 +196,10 @@ class PCARotationDetector extends ChangeNotifier {
 
     // Step 7: Validate signal quality
     _latestValidity = _validityGates.check(_latestPCA, phaseChange);
+
+    if (_latestValidity!.isPlanar && _latestValidity!.hasStrongSignal) {
+      _lastPlanarStrongTimestampMs = timestamp;
+    }
 
     // Debug: Log PCA metrics every 50 samples
     if (_debugSampleCount % 50 == 0) {
@@ -191,7 +224,14 @@ class PCARotationDetector extends ChangeNotifier {
     // Step 8: Update rotation count based on phase progression
     // Don't require perfect validity - allow counting during brief interruptions
     // as long as signal quality is decent (flatness OK + signal strong enough)
-    final canCount = _latestValidity!.isPlanar && _latestValidity!.hasStrongSignal;
+    final withinPlanarGrace = _lastPlanarStrongTimestampMs != 0 &&
+      (timestamp - _lastPlanarStrongTimestampMs) <= config.planarGraceMs;
+    // Counting is more permissive than overall validity, but still requires
+    // coherence + frequency to prevent figure-8 false counts.
+    final canCount = _latestValidity!.hasStrongSignal &&
+      (_latestValidity!.isPlanar || withinPlanarGrace) &&
+      _latestValidity!.hasCoherentMotion &&
+      _latestValidity!.isWithinFrequencyLimit;
 
     if (canCount) {
       final newCount = _phaseUnwrapper.rotationCount;
@@ -258,7 +298,76 @@ class PCARotationDetector extends ChangeNotifier {
     _slidingWindow.clear();
     _phaseUnwrapper.reset();
     _validityGates.reset();
+    _lastPlanarStrongTimestampMs = 0;
+    _prevPc1 = null;
+    _prevPc2 = null;
+    _prevNormal = null;
     notifyListeners();
+  }
+
+  PCAResult _stabilizePcaBasis(PCAResult pca) {
+    final prev1 = _prevPc1;
+    final prev2 = _prevPc2;
+    if (prev1 == null || prev2 == null) {
+      _prevPc1 = pca.pc1;
+      _prevPc2 = pca.pc2;
+      _prevNormal = _cross(pca.pc1, pca.pc2);
+      return pca;
+    }
+
+    final c1 = pca.pc1;
+    final c2 = pca.pc2;
+
+    // Candidates: (pc1,pc2) and swapped (pc2,pc1), each with independent sign flips.
+    final candidates = <(Vector3, Vector3)>[];
+    for (final (a, b) in <(Vector3, Vector3)>[(c1, c2), (c2, c1)]) {
+      for (final sa in <double>[1.0, -1.0]) {
+        for (final sb in <double>[1.0, -1.0]) {
+          candidates.add((a * sa, b * sb));
+        }
+      }
+    }
+
+    double bestScore = double.negativeInfinity;
+    (Vector3, Vector3) best = (c1, c2);
+    for (final cand in candidates) {
+      final a = cand.$1;
+      final b = cand.$2;
+      // Maximize signed alignment to keep directions continuous.
+      final score = a.dot(prev1) + b.dot(prev2);
+      if (score > bestScore) {
+        bestScore = score;
+        best = cand;
+      }
+    }
+
+    var pc1 = best.$1;
+    var pc2 = best.$2;
+
+    // Keep plane normal direction consistent when possible.
+    final normal = _cross(pc1, pc2);
+    final prevNormal = _prevNormal;
+    if (prevNormal != null && normal.dot(prevNormal) < 0) {
+      pc2 = pc2 * -1.0;
+    }
+
+    _prevPc1 = pc1;
+    _prevPc2 = pc2;
+    _prevNormal = _cross(pc1, pc2);
+
+    return PCAResult(
+      eigenvalues: pca.eigenvalues,
+      eigenvectors: [pc1, pc2, pca.pc3],
+      mean: pca.mean,
+    );
+  }
+
+  Vector3 _cross(Vector3 a, Vector3 b) {
+    return Vector3(
+      a.y * b.z - a.z * b.y,
+      a.z * b.x - a.x * b.z,
+      a.x * b.y - a.y * b.x,
+    );
   }
 
   /// Get current Earth's magnetic field baseline (for diagnostics).
