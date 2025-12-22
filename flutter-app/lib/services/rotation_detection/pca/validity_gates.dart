@@ -9,7 +9,7 @@ class ValidityGateConfig {
   /// - Close to 0.0: Strong planar signal (λ3 << λ1, λ2) - IDEAL
   /// - Close to 0.33: Spherical data (reject)
   ///
-  /// Default: 0.20 - relaxed threshold with hysteresis to reduce flickering
+  /// Default: 0.30 - tolerant to imperfect alignment while staying planar
   final double maxFlatness;
 
   /// Hysteresis margin for flatness gate (prevents flickering).
@@ -42,7 +42,7 @@ class ValidityGateConfig {
   /// Minimum phase change per sample to detect motion.
   ///
   /// If phase is too stable, might be stationary or drifting.
-  /// Default: 0.0001 rad/sample - extremely low threshold for very slow rotations
+  /// Default: 0.000005 rad/sample - highly sensitive for very slow rotations
   final double minPhaseChangePerSample;
 
   /// Minimum coherence of signed phase motion.
@@ -53,17 +53,17 @@ class ValidityGateConfig {
   /// - 1.0 means consistent direction
   /// - 0.0 means rapidly changing direction (e.g., figure-8 phone movement)
   ///
-  /// Default: 0.70
+  /// Default: 0.40
   final double minCoherence;
 
   const ValidityGateConfig({
-    this.maxFlatness = 0.20,
+    this.maxFlatness = 0.30,
     this.flatnessHysteresis = 0.05,
     this.minSignalStrength = 5.0,
     this.maxSignalStrength = 10000.0,
     this.maxRotationFrequencyHz = 10.0,
-    this.minPhaseChangePerSample = 0.0001,
-    this.minCoherence = 0.70,
+    this.minPhaseChangePerSample = 0.000005,
+    this.minCoherence = 0.40,
   });
 }
 
@@ -124,7 +124,7 @@ class ValidityGates {
 
   /// Recent phase change measurements for motion detection.
   final List<double> _recentPhaseChanges = [];
-  static const int _phaseChangeHistorySize = 50;  // 0.5s at 100Hz - tolerates brief pauses
+  static const int _phaseChangeHistorySize = 200;  // 2.0s at 100Hz - better for slow rotations
 
   // Frequency gate debouncing: track recent frequency measurements
   final List<double> _recentFrequencies = [];
@@ -132,7 +132,7 @@ class ValidityGates {
 
   // Coherence gate: track signed phase deltas
   final List<double> _recentSignedPhaseDeltas = [];
-  static const int _coherenceHistorySize = 50; // 0.5s at 100Hz
+  static const int _coherenceHistorySize = 200; // 2.0s at 100Hz
   static const double _coherenceEpsilon = 1e-4;
 
   // Debug state tracking
@@ -248,8 +248,8 @@ class ValidityGates {
     final frequencyScore = isWithinFrequencyLimit ? 1.0 : 0.0;
     final coherenceScore = coherence;
 
-    final qualityScore = 0.35 * planarityScore +
-               0.35 * signalScore +
+    final qualityScore = 0.30 * planarityScore +
+               0.40 * signalScore +
                0.20 * coherenceScore +
                0.10 * frequencyScore;
 

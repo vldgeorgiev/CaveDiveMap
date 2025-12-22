@@ -23,6 +23,8 @@ class MagnetometerService extends ChangeNotifier {
   final StorageService _storageService;
 
   StreamSubscription<MagnetometerEvent>? _magnetometerSubscription;
+  StreamSubscription<GyroscopeEvent>? _gyroscopeSubscription;
+  StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
 
   // Measurement state
   bool _isListening = false; // Magnetometer active
@@ -206,6 +208,18 @@ class MagnetometerService extends ChangeNotifier {
       samplingPeriod: const Duration(milliseconds: 10),
     ).listen(_onMagnetometerEvent);
 
+    // Inertial sensors for figure-8 rejection (gyro/accel)
+    _gyroscopeSubscription = gyroscopeEventStream(
+      samplingPeriod: const Duration(milliseconds: 10),
+    ).listen((event) {
+      _pcaDetector?.updateInertial(null, Vector3(event.x, event.y, event.z));
+    });
+    _accelerometerSubscription = accelerometerEventStream(
+      samplingPeriod: const Duration(milliseconds: 10),
+    ).listen((event) {
+      _pcaDetector?.updateInertial(Vector3(event.x, event.y, event.z), null);
+    });
+
     notifyListeners();
   }
 
@@ -215,6 +229,10 @@ class MagnetometerService extends ChangeNotifier {
     _isRecording = false;
     _magnetometerSubscription?.cancel();
     _magnetometerSubscription = null;
+    _gyroscopeSubscription?.cancel();
+    _gyroscopeSubscription = null;
+    _accelerometerSubscription?.cancel();
+    _accelerometerSubscription = null;
 
     // Stop PCA detector if active
     if (_pcaDetector != null) {

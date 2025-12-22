@@ -37,6 +37,14 @@ class PCARotationConfig {
   /// signal remains strong. This improves counting when rotation is jerky.
   final int planarGraceMs;
 
+  /// Maximum allowable gyro magnitude (rad/s) before rejecting due to large
+  /// handset motion (e.g., figure-8 swings).
+  final double maxGyroRadPerSec;
+
+  /// Maximum allowable accelerometer standard deviation (m/s^2) over the recent
+  /// window before rejecting due to excessive linear motion.
+  final double maxAccelStdDev;
+
   /// Validity gate configuration.
   final ValidityGateConfig validityConfig;
 
@@ -46,7 +54,9 @@ class PCARotationConfig {
     this.minWindowFillFraction = 0.5,
     this.baselineAlpha = 0.01,
     this.pausedBaselineAlpha = 0.001,
-    this.planarGraceMs = 700,
+    this.planarGraceMs = 1200,
+    this.maxGyroRadPerSec = 6.0,
+    this.maxAccelStdDev = 4.0,
     this.validityConfig = const ValidityGateConfig(),
   });
 }
@@ -76,11 +86,15 @@ class PCARotationDetector extends ChangeNotifier {
   late final PhaseComputer _phaseComputer;
   late final PhaseUnwrapper _phaseUnwrapper;
   late final ValidityGates _validityGates;
+  final List<double> _recentGyroMagnitudes = [];
+  final List<double> _recentAccelMagnitudes = [];
+  static const int _inertialHistorySize = 100; // ~1s at 100Hz
 
   // State
-  int _rotationCount = 0;
-  int _maxAbsRotationCount = 0;  // Track max absolute count to prevent oscillation
+  int _rotationCount = 0; // emitted count
+  int _maxAbsRotationCount = 0;  // Track max absolute emitted count to prevent oscillation
   PCAResult? _latestPCA;
+  PCAResult? _lockedPCA;
   ValidityGateResult? _latestValidity;
   double _lastPhase = 0.0;
   bool _isActive = false;
@@ -88,6 +102,9 @@ class PCARotationDetector extends ChangeNotifier {
   Vector2 _lastProjected = const Vector2(0, 0); // For debug output
 
   int _lastPlanarStrongTimestampMs = 0;
+  int _lastBasisUpdateMs = 0;
+  double _lockedFlatness = 1.0;
+  int _lastInertialOkMs = 0;
 
   // PCA basis stabilization (eigenvectors can flip sign and/or swap when
   // eigenvalues are close). Keeping a continuous basis is critical for stable
@@ -110,6 +127,52 @@ class PCARotationDetector extends ChangeNotifier {
       config: config.validityConfig,
       samplingRateHz: config.samplingRateHz,
     );
+  }
+
+  /// Update inertial buffers (gyro/accelerometer).
+  void updateInertial(Vector3? accel, Vector3? gyro) {
+    if (gyro != null) {
+      _recentGyroMagnitudes.add(gyro.magnitude);
+      if (_recentGyroMagnitudes.length > _inertialHistorySize) {
+        _recentGyroMagnitudes.removeAt(0);
+      }
+    }
+
+    if (accel != null) {
+      _recentAccelMagnitudes.add(accel.magnitude);
+      if (_recentAccelMagnitudes.length > _inertialHistorySize) {
+        _recentAccelMagnitudes.removeAt(0);
+      }
+    }
+  }
+
+  bool get _inertialOk {
+    if (_recentGyroMagnitudes.isEmpty && _recentAccelMagnitudes.isEmpty) {
+      return true; // no data, skip gating
+    }
+
+    final gyroMax = _recentGyroMagnitudes.isNotEmpty
+        ? _recentGyroMagnitudes.reduce((a, b) => a > b ? a : b)
+        : 0.0;
+    if (gyroMax > config.maxGyroRadPerSec) {
+      return false;
+    }
+
+    if (_recentAccelMagnitudes.length >= 2) {
+      final accelAvg = _recentAccelMagnitudes.reduce((a, b) => a + b) / _recentAccelMagnitudes.length;
+      double variance = 0.0;
+      for (final v in _recentAccelMagnitudes) {
+        final d = v - accelAvg;
+        variance += d * d;
+      }
+      variance /= _recentAccelMagnitudes.length;
+      final stddev = sqrt(variance);
+      if (stddev > config.maxAccelStdDev) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   /// Process new magnetometer reading.
@@ -167,8 +230,40 @@ class PCARotationDetector extends ChangeNotifier {
     // Stabilize eigenvector basis to avoid phase resets/jumps.
     _latestPCA = _stabilizePcaBasis(_latestPCA!);
 
+    // Lock or refresh PCA basis for projection to avoid basis drift.
+    final nowMs = timestamp;
+    final shouldRelock = _lockedPCA == null ||
+        _latestPCA!.flatness + config.validityConfig.flatnessHysteresis < _lockedFlatness ||
+        (_lockedFlatness > config.validityConfig.maxFlatness + config.validityConfig.flatnessHysteresis &&
+            nowMs - _lastBasisUpdateMs > 500);
+    if (shouldRelock) {
+      _lockedPCA = _latestPCA;
+      _lockedFlatness = _latestPCA!.flatness;
+      _lastBasisUpdateMs = nowMs;
+      // Align sign with previous locked normal to keep continuity
+      if (_prevNormal != null) {
+        final newNormal = _cross(_lockedPCA!.pc1, _lockedPCA!.pc2);
+        if (newNormal.dot(_prevNormal!) < 0) {
+          _lockedPCA = PCAResult(
+            eigenvalues: _lockedPCA!.eigenvalues,
+            mean: _lockedPCA!.mean,
+            eigenvectors: [
+              _lockedPCA!.pc1 * -1,
+              _lockedPCA!.pc2 * -1,
+              _lockedPCA!.pc3 * -1,
+            ],
+          );
+        }
+      }
+      _prevNormal = _cross(_lockedPCA!.pc1, _lockedPCA!.pc2);
+      _prevPc1 = _lockedPCA!.pc1;
+      _prevPc2 = _lockedPCA!.pc2;
+    }
+
+    final projectionBasis = _lockedPCA ?? _latestPCA!;
+
     // Step 4: Project latest sample to rotation plane
-    final projected = _projector.project(corrected, _latestPCA!);
+    final projected = _projector.project(corrected, projectionBasis);
     _lastProjected = projected;
 
     // Step 5: Compute phase angle
@@ -182,7 +277,7 @@ class PCARotationDetector extends ChangeNotifier {
     } else if (phaseChange < -3.141592653589793) {
       phaseChange += 2 * 3.141592653589793;
     }
-    final unwrappedPhase = _phaseUnwrapper.unwrap(phase);
+    final unwrappedPhase = _phaseUnwrapper.advanceDelta(phaseChange);
     final rotCountBefore = _phaseUnwrapper.rotationCount;
     _lastPhase = phase;
 
@@ -221,39 +316,29 @@ class PCARotationDetector extends ChangeNotifier {
             'Window: ${(_slidingWindow.samples.length)}/${(config.windowSizeSeconds * config.samplingRateHz).round()} samples');
     }
 
-    // Step 8: Update rotation count based on phase progression
-    // Don't require perfect validity - allow counting during brief interruptions
-    // as long as signal quality is decent (flatness OK + signal strong enough)
+    // Step 8: Update rotation count based on phase progression.
+    // Require planarity + coherence, allow short planarity dropouts, and reject
+    // when inertial sensors show large device motion. Always accumulate phase;
+    // emit when gates pass.
     final withinPlanarGrace = _lastPlanarStrongTimestampMs != 0 &&
-      (timestamp - _lastPlanarStrongTimestampMs) <= config.planarGraceMs;
-    // Counting is more permissive than overall validity, but still requires
-    // coherence + frequency to prevent figure-8 false counts.
-    final canCount = _latestValidity!.hasStrongSignal &&
-      (_latestValidity!.isPlanar || withinPlanarGrace) &&
-      _latestValidity!.hasCoherentMotion &&
-      _latestValidity!.isWithinFrequencyLimit;
+        (timestamp - _lastPlanarStrongTimestampMs) <= config.planarGraceMs;
+    final canEmit = _latestValidity!.qualityScore > 0.60 &&
+        _latestValidity!.isWithinFrequencyLimit &&
+        (_latestValidity!.isPlanar || withinPlanarGrace) &&
+        _latestValidity!.hasPhaseMotion;
 
-    if (canCount) {
-      final newCount = _phaseUnwrapper.rotationCount;
-      final absCount = newCount.abs();
-
-      // Only notify if absolute count increased (prevents oscillation from triggering callbacks)
-      if (absCount > _maxAbsRotationCount) {
-        final phaseDeg = phase * 180 / 3.14159;
-        final unwrappedDeg = _phaseUnwrapper.totalPhase * 180 / 3.14159;
-        final phaseDelta = (phase - _lastPhase) * 180 / 3.14159;
-        final validStr = _latestValidity!.isValid ? "✓" : "⚠️";
-        print('[PCA] 🎯 ROTATION DETECTED! Count: $newCount (abs=$absCount, was ${_maxAbsRotationCount}) $validStr | '
-              'Phase: ${phaseDeg.toStringAsFixed(1)}° (Δ=${phaseDelta.toStringAsFixed(1)}°) | '
-              'Unwrapped: ${unwrappedDeg.toStringAsFixed(1)}° | '
-              'Projected: (${_lastProjected.x.toStringAsFixed(2)}, ${_lastProjected.y.toStringAsFixed(2)})');
-        _maxAbsRotationCount = absCount;
-        _rotationCount = newCount;  // Keep raw count for reference
-        notifyListeners();
-      } else {
-        // Update raw count but don't notify (oscillation)
-        _rotationCount = newCount;
-      }
+    final pendingAbs = (_phaseUnwrapper.totalPhase.abs() / (2 * 3.141592653589793)).floor();
+    if (canEmit && pendingAbs > _maxAbsRotationCount) {
+      final newCount = pendingAbs * (_phaseUnwrapper.totalPhase >= 0 ? 1 : -1);
+      final phaseDeg = phase * 180 / 3.14159;
+      final unwrappedDeg = _phaseUnwrapper.totalPhase * 180 / 3.14159;
+      print('[PCA] 🎯 ROTATION DETECTED! Count: $newCount (abs=$pendingAbs, was ${_maxAbsRotationCount}) ✓ | '
+            'Phase: ${phaseDeg.toStringAsFixed(1)}° | '
+            'Unwrapped: ${unwrappedDeg.toStringAsFixed(1)}° | '
+            'Projected: (${_lastProjected.x.toStringAsFixed(2)}, ${_lastProjected.y.toStringAsFixed(2)})');
+      _maxAbsRotationCount = pendingAbs;
+      _rotationCount = newCount;
+      notifyListeners();
     }
   }
 
@@ -292,6 +377,7 @@ class PCARotationDetector extends ChangeNotifier {
     _rotationCount = 0;
     _maxAbsRotationCount = 0;
     _latestPCA = null;
+    _lockedPCA = null;
     _latestValidity = null;
     _lastPhase = 0.0;
     _baselineRemoval.reset();
@@ -302,6 +388,11 @@ class PCARotationDetector extends ChangeNotifier {
     _prevPc1 = null;
     _prevPc2 = null;
     _prevNormal = null;
+    _lastBasisUpdateMs = 0;
+    _lockedFlatness = 1.0;
+    _lastInertialOkMs = 0;
+    _recentGyroMagnitudes.clear();
+    _recentAccelMagnitudes.clear();
     notifyListeners();
   }
 
