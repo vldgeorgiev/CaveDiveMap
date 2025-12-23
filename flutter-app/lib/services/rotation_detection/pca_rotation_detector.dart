@@ -52,7 +52,7 @@ class PCARotationConfig {
     this.samplingRateHz = 100.0,
     this.windowSizeSeconds = 1.0,
     this.minWindowFillFraction = 0.5,
-    this.baselineAlpha = 0.01,
+    this.baselineAlpha = 0.02,
     this.pausedBaselineAlpha = 0.001,
     this.planarGraceMs = 1200,
     this.maxGyroRadPerSec = 6.0,
@@ -281,12 +281,12 @@ class PCARotationDetector extends ChangeNotifier {
     final rotCountBefore = _phaseUnwrapper.rotationCount;
     _lastPhase = phase;
 
-    // Debug: Log phase evolution every 20 samples
-    if (_debugSampleCount % 20 == 0) {
-      print('[PCA-PHASE] Phase: ${(phase * 180 / 3.14159).toStringAsFixed(1)}° | '
-            'Change: ${(phaseChange * 180 / 3.14159).toStringAsFixed(1)}° | '
-            'Unwrapped: ${(unwrappedPhase * 180 / 3.14159).toStringAsFixed(1)}° | '
-            'RotCount: $rotCountBefore');
+    // Debug: Log phase evolution occasionally
+    if (_debugSampleCount % 40 == 0) {
+      print('[PCA-PHASE] phase=${(phase * 180 / 3.14159).toStringAsFixed(1)}° '
+            'dphi=${(phaseChange * 180 / 3.14159).toStringAsFixed(1)}° '
+            'unwrap=${(unwrappedPhase * 180 / 3.14159).toStringAsFixed(1)}° '
+            'rot=${rotCountBefore}');
     }
 
     // Step 7: Validate signal quality
@@ -297,23 +297,23 @@ class PCARotationDetector extends ChangeNotifier {
     }
 
     // Debug: Log PCA metrics every 50 samples
-    if (_debugSampleCount % 50 == 0) {
+    if (_debugSampleCount % 80 == 0) {
       final eigenvalues = _latestPCA!.eigenvalues;
       final isSaturated = _latestPCA!.signalStrength > 10000.0;
       final signalStdDev = sqrt(_latestPCA!.signalStrength);
       final lambda2Ratio = eigenvalues[1] / eigenvalues[0];
       final lambda3Ratio = eigenvalues[2] / eigenvalues[0];
       final baselineMag = sqrt(baseline.x * baseline.x + baseline.y * baseline.y + baseline.z * baseline.z);
-
-      print('[PCA] Quality: ${(signalQuality * 100).toStringAsFixed(1)}% | '
-            'Flatness: ${_latestPCA!.flatness.toStringAsFixed(3)} (${_latestValidity!.isPlanar ? "✓ planar" : "✗ spherical"}) | '
-            'Signal: ${_latestPCA!.signalStrength.toStringAsFixed(2)} μT² (σ=${signalStdDev.toStringAsFixed(1)} μT) (${_latestValidity!.hasStrongSignal ? "✓" : "✗"})${isSaturated ? " [SAT!]" : ""} | '
-            'Valid: ${_latestValidity!.isValid ? "✓" : "✗"} | '
-            'Rotations: $_rotationCount');
-      print('[PCA-EIGENVALUES] λ1=${eigenvalues[0].toStringAsFixed(2)} λ2=${eigenvalues[1].toStringAsFixed(2)} λ3=${eigenvalues[2].toStringAsFixed(2)} | '
-            'λ2/λ1=${lambda2Ratio.toStringAsFixed(3)} λ3/λ1=${lambda3Ratio.toStringAsFixed(3)} | '
-            'Baseline: ${baselineMag.toStringAsFixed(1)} μT | '
-            'Window: ${(_slidingWindow.samples.length)}/${(config.windowSizeSeconds * config.samplingRateHz).round()} samples');
+      print('[PCA] q=${(signalQuality * 100).toStringAsFixed(1)}% '
+            'flat=${_latestPCA!.flatness.toStringAsFixed(3)}(${_latestValidity!.isPlanar ? "P" : "NP"}) '
+            'sig=${_latestPCA!.signalStrength.toStringAsFixed(1)}(σ=${signalStdDev.toStringAsFixed(1)}) '
+            'freqOk=${_latestValidity!.isWithinFrequencyLimit ? "Y" : "N"} '
+            'motion=${_latestValidity!.hasPhaseMotion ? "Y" : "N"} '
+            'rot=$_rotationCount '
+            'base=${baselineMag.toStringAsFixed(1)} '
+            'win=${_slidingWindow.samples.length}/${(config.windowSizeSeconds * config.samplingRateHz).round()} '
+            'λ=${eigenvalues[0].toStringAsFixed(0)},${eigenvalues[1].toStringAsFixed(0)},${eigenvalues[2].toStringAsFixed(0)} '
+            'λr=${lambda2Ratio.toStringAsFixed(3)},${lambda3Ratio.toStringAsFixed(3)}');
     }
 
     // Step 8: Update rotation count based on phase progression.
@@ -322,10 +322,10 @@ class PCARotationDetector extends ChangeNotifier {
     // emit when gates pass.
     final withinPlanarGrace = _lastPlanarStrongTimestampMs != 0 &&
         (timestamp - _lastPlanarStrongTimestampMs) <= config.planarGraceMs;
-    final canEmit = _latestValidity!.qualityScore > 0.60 &&
+    final canEmit = _latestValidity!.qualityScore > 0.50 &&
         _latestValidity!.isWithinFrequencyLimit &&
         (_latestValidity!.isPlanar || withinPlanarGrace) &&
-        _latestValidity!.hasPhaseMotion;
+        (_latestValidity!.hasPhaseMotion || withinPlanarGrace);
 
     final pendingAbs = (_phaseUnwrapper.totalPhase.abs() / (2 * 3.141592653589793)).floor();
     if (canEmit && pendingAbs > _maxAbsRotationCount) {

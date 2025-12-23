@@ -114,7 +114,9 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
 
     // Restart sensors after returning from settings
     if (mounted) {
-      context.read<MagnetometerService>().startListening();
+      final magnetometer = context.read<MagnetometerService>();
+      magnetometer.startListening();
+      magnetometer.startRecording(); // ensure recording resumes after stopListening()
       context.read<CompassService>().startListening();
     }
   }

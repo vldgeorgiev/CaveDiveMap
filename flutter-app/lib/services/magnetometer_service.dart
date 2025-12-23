@@ -57,6 +57,7 @@ class MagnetometerService extends ChangeNotifier {
   RotationAlgorithm _algorithm = RotationAlgorithm.threshold;
   PCARotationDetector? _pcaDetector;
   bool _uncalibratedActive = false;
+  int _lastUncalibratedMs = 0;
 
   // Performance optimization
   int _samplesSinceUIUpdate = 0;
@@ -80,6 +81,11 @@ class MagnetometerService extends ChangeNotifier {
     if (_storageService.surveyPoints.isNotEmpty) {
       _currentDistance = _storageService.surveyPoints.last.distance;
     }
+
+    // Auto-start listening and recording since the app has no manual start
+    // control. This ensures rotation detection begins immediately on launch.
+    startListening();
+    startRecording();
   }
 
   // Getters
@@ -259,6 +265,7 @@ class MagnetometerService extends ChangeNotifier {
       _pcaDetector!.stop();
     _pcaDetector = null;
     _uncalibratedActive = false;
+    _lastUncalibratedMs = 0;
     }
 
     notifyListeners();
@@ -326,9 +333,16 @@ class MagnetometerService extends ChangeNotifier {
 
     // Route to appropriate algorithm
     if (_algorithm == RotationAlgorithm.pca) {
-      // Prefer uncalibrated stream when active; otherwise use calibrated.
-      if (!_uncalibratedActive) {
+      // PCA prefers uncalibrated. If we haven't seen an uncalibrated sample
+      // recently, fall back to calibrated to avoid stalling.
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final staleUncal =
+          !_uncalibratedActive || (nowMs - _lastUncalibratedMs) > 1000;
+      if (staleUncal) {
         _processPCAAlgorithm(event.x, event.y, event.z);
+        if (_uncalibratedActive) {
+          print('[MAG] ⚠️ Uncal stalled (${nowMs - _lastUncalibratedMs}ms ago) - using calibrated fallback');
+        }
       }
     } else {
       _processThresholdAlgorithm(magnitude);
@@ -352,6 +366,7 @@ class MagnetometerService extends ChangeNotifier {
     _uncalibratedZ = z;
     _uncalibratedMagnitude = sqrt(x * x + y * y + z * z);
     _uncalibratedActive = true;
+    _lastUncalibratedMs = DateTime.now().millisecondsSinceEpoch;
 
     // Feed PCA with uncalibrated data when selected
     if (_algorithm == RotationAlgorithm.pca && _pcaDetector != null) {
