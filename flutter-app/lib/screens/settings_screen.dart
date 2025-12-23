@@ -514,6 +514,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         magnetometer.magneticStrength,
                         highlight: true,
                       ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Uncalibrated Magnetometer (μT) – Android',
+                        style: AppTextStyles.body.copyWith(
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      _buildSensorRow('X', magnetometer.uncalibratedX),
+                      const SizedBox(height: 4),
+                      _buildSensorRow('Y', magnetometer.uncalibratedY),
+                      const SizedBox(height: 4),
+                      _buildSensorRow('Z', magnetometer.uncalibratedZ),
+                      const Divider(height: 20),
+                      _buildSensorRow(
+                        'Uncal Magnitude',
+                        magnetometer.uncalibratedMagnitude,
+                        highlight: true,
+                      ),
                       const SizedBox(height: 8),
                       Text(
                         'Compass',

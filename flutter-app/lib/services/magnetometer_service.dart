@@ -7,6 +7,7 @@ import 'storage_service.dart';
 import 'rotation_detection/rotation_algorithm.dart';
 import 'rotation_detection/pca_rotation_detector.dart';
 import 'rotation_detection/vector3.dart';
+import 'uncalibrated_magnetometer.dart';
 
 /// Service for magnetometer-based distance measurement.
 ///
@@ -25,6 +26,7 @@ class MagnetometerService extends ChangeNotifier {
   StreamSubscription<MagnetometerEvent>? _magnetometerSubscription;
   StreamSubscription<GyroscopeEvent>? _gyroscopeSubscription;
   StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
+  StreamSubscription<Map<String, double>>? _uncalibratedMagSubscription;
 
   // Measurement state
   bool _isListening = false; // Magnetometer active
@@ -39,6 +41,10 @@ class MagnetometerService extends ChangeNotifier {
   double _magnetometerX = 0.0;
   double _magnetometerY = 0.0;
   double _magnetometerZ = 0.0;
+  double _uncalibratedX = 0.0;
+  double _uncalibratedY = 0.0;
+  double _uncalibratedZ = 0.0;
+  double _uncalibratedMagnitude = 0.0;
 
   // Settings
   double _wheelCircumference = 0.263; // meters
@@ -50,6 +56,7 @@ class MagnetometerService extends ChangeNotifier {
   // Algorithm selection
   RotationAlgorithm _algorithm = RotationAlgorithm.threshold;
   PCARotationDetector? _pcaDetector;
+  bool _uncalibratedActive = false;
 
   // Performance optimization
   int _samplesSinceUIUpdate = 0;
@@ -87,6 +94,10 @@ class MagnetometerService extends ChangeNotifier {
   double get magnetometerX => _magnetometerX;
   double get magnetometerY => _magnetometerY;
   double get magnetometerZ => _magnetometerZ;
+  double get uncalibratedX => _uncalibratedX;
+  double get uncalibratedY => _uncalibratedY;
+  double get uncalibratedZ => _uncalibratedZ;
+  double get uncalibratedMagnitude => _uncalibratedMagnitude;
   RotationAlgorithm get algorithm => _algorithm;
   PCARotationDetector? get pcaDetector => _pcaDetector;
 
@@ -208,6 +219,12 @@ class MagnetometerService extends ChangeNotifier {
       samplingPeriod: const Duration(milliseconds: 10),
     ).listen(_onMagnetometerEvent);
 
+    // Uncalibrated magnetometer (Android only; falls back silently elsewhere)
+    _uncalibratedMagSubscription = UncalibratedMagnetometer.events.listen(
+      _onUncalibratedMagnetometerEvent,
+      onError: (e) => print('[MAG] Uncalibrated stream error: $e'),
+    );
+
     // Inertial sensors for figure-8 rejection (gyro/accel)
     _gyroscopeSubscription = gyroscopeEventStream(
       samplingPeriod: const Duration(milliseconds: 10),
@@ -229,6 +246,8 @@ class MagnetometerService extends ChangeNotifier {
     _isRecording = false;
     _magnetometerSubscription?.cancel();
     _magnetometerSubscription = null;
+    _uncalibratedMagSubscription?.cancel();
+    _uncalibratedMagSubscription = null;
     _gyroscopeSubscription?.cancel();
     _gyroscopeSubscription = null;
     _accelerometerSubscription?.cancel();
@@ -238,7 +257,8 @@ class MagnetometerService extends ChangeNotifier {
     if (_pcaDetector != null) {
       _pcaDetector!.removeListener(_onPCARotationCountChanged);
       _pcaDetector!.stop();
-      _pcaDetector = null;
+    _pcaDetector = null;
+    _uncalibratedActive = false;
     }
 
     notifyListeners();
@@ -306,7 +326,10 @@ class MagnetometerService extends ChangeNotifier {
 
     // Route to appropriate algorithm
     if (_algorithm == RotationAlgorithm.pca) {
-      _processPCAAlgorithm(event);
+      // Prefer uncalibrated stream when active; otherwise use calibrated.
+      if (!_uncalibratedActive) {
+        _processPCAAlgorithm(event.x, event.y, event.z);
+      }
     } else {
       _processThresholdAlgorithm(magnitude);
     }
@@ -320,11 +343,27 @@ class MagnetometerService extends ChangeNotifier {
     }
   }
 
+  void _onUncalibratedMagnetometerEvent(Map<String, double> data) {
+    final x = data['x'] ?? 0.0;
+    final y = data['y'] ?? 0.0;
+    final z = data['z'] ?? 0.0;
+    _uncalibratedX = x;
+    _uncalibratedY = y;
+    _uncalibratedZ = z;
+    _uncalibratedMagnitude = sqrt(x * x + y * y + z * z);
+    _uncalibratedActive = true;
+
+    // Feed PCA with uncalibrated data when selected
+    if (_algorithm == RotationAlgorithm.pca && _pcaDetector != null) {
+      _processPCAAlgorithm(x, y, z);
+    }
+  }
+
   /// Process sample with PCA algorithm
-  void _processPCAAlgorithm(MagnetometerEvent event) {
+  void _processPCAAlgorithm(double x, double y, double z) {
     if (_pcaDetector == null) return;
 
-    final vector = Vector3(event.x, event.y, event.z);
+    final vector = Vector3(x, y, z);
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     _pcaDetector!.processSample(vector, timestamp);
   }
