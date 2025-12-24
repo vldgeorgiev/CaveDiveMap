@@ -57,6 +57,8 @@ class MagnetometerService extends ChangeNotifier {
   RotationAlgorithm _algorithm = RotationAlgorithm.threshold;
   PCARotationDetector? _pcaDetector;
   bool _uncalibratedActive = false;
+  bool _uncalibratedSupported = true;
+  String? _uncalibratedError;
   int _lastUncalibratedMs = 0;
 
   // Performance optimization
@@ -104,6 +106,8 @@ class MagnetometerService extends ChangeNotifier {
   double get uncalibratedY => _uncalibratedY;
   double get uncalibratedZ => _uncalibratedZ;
   double get uncalibratedMagnitude => _uncalibratedMagnitude;
+  bool get uncalibratedSupported => _uncalibratedSupported;
+  String? get uncalibratedError => _uncalibratedError;
   RotationAlgorithm get algorithm => _algorithm;
   PCARotationDetector? get pcaDetector => _pcaDetector;
 
@@ -228,7 +232,12 @@ class MagnetometerService extends ChangeNotifier {
     // Uncalibrated magnetometer (Android only; falls back silently elsewhere)
     _uncalibratedMagSubscription = UncalibratedMagnetometer.events.listen(
       _onUncalibratedMagnetometerEvent,
-      onError: (e) => print('[MAG] Uncalibrated stream error: $e'),
+      onError: (e) {
+        _uncalibratedSupported = false;
+        _uncalibratedError = 'Uncalibrated magnetometer not available: $e';
+        print('[MAG] ❌ $_uncalibratedError');
+        notifyListeners();
+      },
     );
 
     // Inertial sensors for figure-8 rejection (gyro/accel)
@@ -331,23 +340,6 @@ class MagnetometerService extends ChangeNotifier {
 
     _magneticStrength = magnitude;
 
-    // Route to appropriate algorithm
-    if (_algorithm == RotationAlgorithm.pca) {
-      // PCA prefers uncalibrated. If we haven't seen an uncalibrated sample
-      // recently, fall back to calibrated to avoid stalling.
-      final nowMs = DateTime.now().millisecondsSinceEpoch;
-      final staleUncal =
-          !_uncalibratedActive || (nowMs - _lastUncalibratedMs) > 1000;
-      if (staleUncal) {
-        _processPCAAlgorithm(event.x, event.y, event.z);
-        if (_uncalibratedActive) {
-          print('[MAG] ⚠️ Uncal stalled (${nowMs - _lastUncalibratedMs}ms ago) - using calibrated fallback');
-        }
-      }
-    } else {
-      _processThresholdAlgorithm(magnitude);
-    }
-
     // Throttle UI updates to avoid overwhelming the UI thread
     // Only notify listeners every N samples instead of on every reading
     _samplesSinceUIUpdate++;
@@ -368,9 +360,11 @@ class MagnetometerService extends ChangeNotifier {
     _uncalibratedActive = true;
     _lastUncalibratedMs = DateTime.now().millisecondsSinceEpoch;
 
-    // Feed PCA with uncalibrated data when selected
+    // Feed detectors with uncalibrated data when selected
     if (_algorithm == RotationAlgorithm.pca && _pcaDetector != null) {
       _processPCAAlgorithm(x, y, z);
+    } else if (_algorithm == RotationAlgorithm.threshold) {
+      _processThresholdAlgorithm(_uncalibratedMagnitude);
     }
   }
 

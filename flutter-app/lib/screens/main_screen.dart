@@ -330,7 +330,7 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
 
                           // Magnetic strength indicator
                           _buildMagneticStrengthIndicator(
-                            magnetometer.magneticStrength,
+                            magnetometer.uncalibratedMagnitude,
                             settings.minPeakThreshold,
                             settings.maxPeakThreshold,
                             magnetometer.algorithm,
@@ -426,7 +426,7 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
       return _buildPCASignalQuality(signalQuality);
     }
 
-    // Legacy threshold algorithm display
+    // Legacy threshold algorithm display (using uncalibrated magnitude)
     // Calculate display range: 0 to maxThreshold + 20%
     final displayMax = maxThreshold * 1.2;
     final normalizedStrength = (strength / displayMax).clamp(0.0, 1.0);
@@ -448,7 +448,7 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Magnetic Field',
+          'Magnetic Field (Uncalibrated)',
           style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
         ),
         const SizedBox(height: 8),

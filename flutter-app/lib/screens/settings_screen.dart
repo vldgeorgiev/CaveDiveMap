@@ -495,6 +495,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (!magnetometer.uncalibratedSupported ||
+                          magnetometer.uncalibratedError != null) ...[
+                        Text(
+                          magnetometer.uncalibratedError ??
+                              'Uncalibrated magnetometer not available on this device.',
+                          style: AppTextStyles.caption.copyWith(
+                            color: Colors.redAccent,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
                       Text(
                         'Magnetometer (μT)',
                         style: AppTextStyles.body.copyWith(
