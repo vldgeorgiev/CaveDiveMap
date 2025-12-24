@@ -2,7 +2,7 @@
 
 ## Summary
 
-Improve the magnetometer-based wheel rotation detection algorithm to work reliably across all phone orientations, overcome OS auto-calibration effects, and reduce false positives from figure-8 phone movements.
+Improve the magnetometer-based wheel rotation detection algorithm to work reliably across all phone orientations, overcome OS auto-calibration effects, and reduce false positives from figure-8 phone movements. Threshold detection remains the default; PCA phase tracking is offered as an opt-in beta path.
 
 ## Problem Statement
 

@@ -448,7 +448,7 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Magnetic Field (Uncalibrated)',
+          'Magnetic Field',
           style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
         ),
         const SizedBox(height: 8),

@@ -294,31 +294,30 @@ Manual threshold configuration SHALL be available only in legacy mode for backwa
 
 ### Requirement: Detection Algorithm Selection (REQ-MAG-009)
 
-The app SHALL use PCA phase tracking by default with optional legacy threshold mode for backward compatibility and debugging.
+The app SHALL default to threshold-based detection with optional PCA phase tracking (beta) for users who opt in; both algorithms SHALL be accessible via settings.
 
 **Priority**: MUST
 
-**Change Summary**: Changed from single algorithm (previous: magnitude-based threshold only) to PCA-primary with legacy fallback
+**Change Summary**: Default is threshold; PCA is an opt-in beta. Threshold is not considered legacy and remains supported.
 
-**Rationale**: PCA solves orientation dependency, drift sensitivity, and false positive issues. Legacy mode preserved for users who prefer it or encounter PCA issues on specific devices.
+**Rationale**: Threshold mode is simple and configurable; PCA offers orientation independence but is still in beta. Users can switch based on preference and device behavior.
 
-**Verification**: Verify PCA is default; verify toggle between PCA and legacy modes; verify both modes function correctly.
+**Verification**: Verify threshold is default; verify toggle between threshold and PCA; verify both modes function correctly and selection persists.
 
-#### Scenario: Default algorithm is PCA
+#### Scenario: Default algorithm is threshold
 
 **Given** the app is launched for the first time OR after update  
 **When** magnetometer service initializes  
-**Then** PCA phase tracking SHALL be the active algorithm  
-**And** settings SHALL show "PCA Detection (Recommended): ON"  
-**And** legacy mode toggle SHALL be available
+**Then** threshold detection SHALL be the active algorithm  
+**And** settings SHALL show threshold as selected  
+**And** PCA toggle SHALL be available
 
 #### Scenario: Manual algorithm toggle
 
-**Given** a user wants to use legacy threshold mode  
-**When** they toggle "Use Classic Detection" in settings  
-**Then** the app SHALL switch to threshold-based algorithm  
-**And** PCA processing SHALL be paused  
-**And** threshold configuration controls SHALL become visible  
+**Given** a user wants to use PCA phase tracking  
+**When** they toggle PCA in settings  
+**Then** the app SHALL switch to PCA-based algorithm  
+**And** threshold processing SHALL be paused  
 **And** selection SHALL persist across app restarts
 
 ## REMOVED Requirements

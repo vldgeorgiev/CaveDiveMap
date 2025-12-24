@@ -914,18 +914,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _getAlgorithmName(RotationAlgorithm algorithm) {
     switch (algorithm) {
       case RotationAlgorithm.threshold:
-        return 'Threshold (Legacy)';
+        return 'Magnitude Threshold';
       case RotationAlgorithm.pca:
-        return 'PCA Phase Tracking (New)';
+        return 'PCA Phase Tracking (Beta)';
     }
   }
 
   String _getAlgorithmDescription(RotationAlgorithm algorithm) {
     switch (algorithm) {
       case RotationAlgorithm.threshold:
-        return 'Magnitude-based peak detection. Requires manual tuning.';
+        return 'Magnitude-based peak detection. Default, simple, configurable.';
       case RotationAlgorithm.pca:
-        return 'Orientation-independent phase tracking. Zero configuration.';
+        return 'Orientation-independent phase tracking (beta).';
     }
   }
 
