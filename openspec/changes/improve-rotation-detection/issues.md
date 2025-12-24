@@ -254,31 +254,11 @@ if (canCount) {
 
 ## Configuration Evolution
 
-### Validity Gate Thresholds
+### Configuration (current approach, values subject to tuning)
 
-**Initial Values** (Early Dec 2025):
-```dart
-minPlanarity = 0.15
-maxFrequencyHz = 5.0
-minPhaseChange = 0.001
-signalRange = 5.0 - 10000.0
-```
-
-**Current Values** (Dec 22, 2025):
-```dart
-maxFlatness = 0.20 (with 0.05 hysteresis)
-maxFrequencyHz = 10.0 (with 10-sample debouncing)
-minPhaseChange = 0.0001 (with 50-sample averaging)
-signalRange = 5.0 - 10000.0 (unchanged)
-```
-
-**Changes Summary**:
-- Flatness threshold raised 0.15→0.20 (more permissive)
-- Flatness hysteresis added (0.05 buffer)
-- Frequency limit raised 5Hz→10Hz (allows faster rotation)
-- Frequency debouncing added (10 samples)
-- Motion threshold lowered 100x (0.001→0.0001)
-- Motion averaging increased 5x (10→50 samples)
+- Validity gates: flatness, signal strength, frequency, and phase motion with hysteresis/debouncing tuned empirically; parameters remain adjustable during beta.
+- Pipeline parameters: ~1s window with early start, baseline EMA tuned for uncalibrated drift, planarity grace during brief dropouts, PCA basis locking with quality-based refresh.
+- Input: uncalibrated-only magnetometer (`TYPE_MAGNETIC_FIELD_UNCALIBRATED`); calibrated feed is not used for detection.
 
 ---
 

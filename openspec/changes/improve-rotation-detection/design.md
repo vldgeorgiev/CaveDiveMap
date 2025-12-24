@@ -24,29 +24,10 @@ This document details the PCA-based phase tracking algorithm for wheel rotation 
 
 ## Current System Analysis
 
-### Existing Algorithm
+### Existing Algorithms
 
-**File**: `flutter-app/lib/services/magnetometer_service.dart`
-
-```dart
-// Current approach (simplified)
-void _onMagnetometerEvent(MagnetometerEvent event) {
-  final magnitude = sqrt(x² + y² + z²);
-  
-  if (_isReadyForNewPeak && _recentMaxMagnitude > _maxPeakThreshold) {
-    _onRotationDetected();  // Count rotation
-    _isReadyForNewPeak = false;
-  } else if (!_isReadyForNewPeak && magnitude < _minPeakThreshold) {
-    _isReadyForNewPeak = true;  // Ready for next peak
-  }
-}
-```
-
-**Problems**:
-- Magnitude = `sqrt(x² + y² + z²)` loses directional information
-- Earth's field (~50 μT) combines differently with magnet field (~150 μT) depending on orientation
-- OS auto-calibration changes baseline over time, invalidating thresholds
-- Peak detection fails when magnitude variation is insufficient
+- **Legacy threshold**: Still present for compatibility; uses magnitude thresholds but now fed with *uncalibrated* sensor data.
+- **PCA phase tracking (default)**: Uncalibrated-only input, baseline removal, PCA plane locking, validity gating, phase unwrapping with accumulated emission gating.
 
 ---
 
@@ -80,9 +61,9 @@ Distance = rotations × wheel_circumference
 
 ### Step 1: Baseline Removal
 
-**Purpose**: Remove Earth's magnetic field and slow drift from OS calibration
+**Purpose**: Remove Earth's magnetic field and drift. We now consume `TYPE_MAGNETIC_FIELD_UNCALIBRATED` on Android and own the baseline; calibrated feed is not used for PCA/threshold counting.
 
-**Method**: Exponential Moving Average (EMA) per axis
+**Method**: Exponential Moving Average (EMA) per axis with a tuned alpha suitable for uncalibrated drift adaptation (value adjustable during beta)
 
 ```dart
 class BaselineRemoval {
@@ -122,7 +103,7 @@ class BaselineRemoval {
 
 **Purpose**: Accumulate data for PCA computation
 
-**Window Size**: 1.0 second (50-150 samples depending on sampling rate)
+**Window Size**: On the order of 1 second (50-150 samples depending on sampling rate), with early-start min-fill to reduce startup latency
 
 ```dart
 class SlidingWindowBuffer {
@@ -153,7 +134,7 @@ class SlidingWindowBuffer {
 
 **Purpose**: Find the dominant 2D plane of rotation
 
-**Method**: Eigenvalue decomposition of covariance matrix
+**Method**: Eigenvalue decomposition of covariance matrix with basis locking to avoid sign flips and drift; refresh basis only when quality improves or degrades past hysteresis.
 
 ```dart
 import 'package:ml_linalg/matrix.dart';
@@ -355,7 +336,7 @@ class PhaseComputer {
 
 **Purpose**: Track continuous phase and count 2π cycles
 
-**Method**: Detect phase wraps at ±π boundary
+**Method**: Detect phase wraps at ±π boundary and accumulate total phase; emission is gated separately by validity and quality to handle pauses and brief gate failures without losing accumulated phase.
 
 ```dart
 class PhaseUnwrapper {
@@ -881,7 +862,7 @@ dependencies:
 ### Platform Requirements
 
 - **iOS**: 12.0+ (CoreMotion magnetometer API)
-- **Android**: API 26+ (Sensor.TYPE_MAGNETIC_FIELD)
+- **Android**: API 26+ (Sensor.TYPE_MAGNETIC_FIELD_UNCALIBRATED for primary pipeline)
 - **Sampling Rate**: 50-150 Hz (device-dependent)
 
 ---

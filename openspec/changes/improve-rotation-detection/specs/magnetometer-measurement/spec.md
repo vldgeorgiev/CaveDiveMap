@@ -234,6 +234,32 @@ The PCA phase tracking algorithm SHALL operate without manual threshold configur
 
 ---
 
+### Requirement: Uncalibrated Magnetometer Support (REQ-MAG-010)
+
+The system SHALL use uncalibrated magnetometer readings (e.g., Android `TYPE_MAGNETIC_FIELD_UNCALIBRATED`) for rotation detection, and SHALL surface an error state when uncalibrated data is unavailable on the device.
+
+**Priority**: MUST
+
+**Rationale**: Calibrated feeds are auto-normalized by the OS and hide the magnet’s field during static periods. Uncalibrated data preserves the true field and enables reliable PCA phase tracking.
+
+**Verification**: On Android, verify the app consumes uncalibrated x/y/z; simulate unavailability and confirm an error/warning is shown and counting does not proceed silently with calibrated data.
+
+#### Scenario: Use uncalibrated data when available
+
+**Given** the device exposes `TYPE_MAGNETIC_FIELD_UNCALIBRATED`  
+**When** the magnetometer service starts  
+**Then** PCA and legacy detectors SHALL consume uncalibrated x/y/z values only  
+**And** calibrated values SHALL NOT be used for detection
+
+#### Scenario: Uncalibrated data not supported
+
+**Given** the device does not expose uncalibrated magnetometer data  
+**When** the app starts  
+**Then** the app SHALL display an error/warning about missing uncalibrated support  
+**And** detection SHALL NOT silently fall back to calibrated data without informing the user
+
+---
+
 ## MODIFIED Requirements
 
 ### Requirement: Configurable Detection Thresholds (REQ-MAG-008)
@@ -306,14 +332,12 @@ None - all existing functionality is preserved in legacy mode.
 All scenarios defined above SHALL have corresponding automated tests where possible, or documented manual test procedures for hardware-dependent scenarios.
 
 **Unit Tests** (target coverage >90%):
-- Axis-differential detection with synthetic data
-- Frequency-domain analysis with known frequencies  
-- ML model inference with labeled test data
 - Circular buffer edge cases
-- Algorithm selection logic
+- PCA/validity gating combinations
+- Algorithm selection logic and uncalibrated availability handling
 
 **Integration Tests**:
-- End-to-end detection pipeline
+- End-to-end detection pipeline (uncalibrated feed)
 - Algorithm switching and fallback
 - Legacy mode compatibility
 - Data persistence with new fields
@@ -332,7 +356,6 @@ All scenarios defined above SHALL have corresponding automated tests where possi
 - **CPU Usage**: Detection processing SHALL NOT exceed 10% average CPU on target devices
 - **Memory**: Algorithm runtime memory SHALL NOT exceed 10 MB additional
 - **Battery**: Extended detection (60 minutes) SHALL NOT increase battery drain by >5%
-- **Model Size**: ML model files SHALL NOT exceed 500 KB per model
 - **Latency**: 95th percentile detection latency <100ms
 
 ---

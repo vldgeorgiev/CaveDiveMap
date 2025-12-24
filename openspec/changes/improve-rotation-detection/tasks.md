@@ -1,27 +1,21 @@
 # Implementation Tasks: PCA-Based Rotation Detection
 
-## Current Status (December 22, 2025)
+## Current Status (January 2026)
 
-**Core Implementation**: ✅ COMPLETE
-- PCA-based rotation detection fully implemented
-- Custom Jacobi eigenvalue solver (no external dependencies)
-- All pipeline components working
-- UI integration complete
-- Settings persistence working
+**Core Implementation**: ✅ COMPLETE (uncalibrated-only PCA is default; legacy threshold kept for fallback)
+- PCA pipeline: uncalibrated magnetometer input, baseline alpha ~0.02, basis locking, long motion/coherence histories, emission gating
+- Auto-start listening/recording on launch; restart after Settings
+- UI: PCA signal quality in main, uncalibrated readout and unsupported error in Settings
 
-**Recent Bug Fixes** (see issues.md for details):
-- ✅ Fixed eigenvector interpretation (PC1/PC2 in plane, not PC2/PC3)
-- ✅ Replaced planarity metric with flatness (λ3/sum)
-- ✅ Fixed negative rotation count handling
-- ✅ Added flatness gate hysteresis (0.20±0.05)
-- ✅ Added frequency gate debouncing (10-sample average)
-- ✅ Lowered motion threshold (0.001→0.0001)
-- ✅ Relaxed counting requirements (planar + strong signal only)
-- ✅ Increased motion gate averaging (10→50 samples)
-- ✅ Fixed rotation count oscillation (track max absolute count)
+**Recent Bug Fixes/Changes**:
+- ✅ Uncalibrated EventChannel on Android and service integration; detection uses uncalibrated values only
+- ✅ Basis locking and gated emission (no reset on gate failure)
+- ✅ Planarity tolerance/hysteresis and long motion/coherence averaging tuned for slow/jerky rotation (values still adjustable during beta)
+- ✅ Logging throttled/compact; stall warning when uncal stream stops
 
 **Active Issues**:
-- 🔄 Testing interruption handling in field conditions
+- 🔄 Interruption handling after wheel removal/reattach (baseline/plane rebuild heuristics)
+- 🛈 Uncalibrated magnetometer required; show error when unavailable
 
 ---
 
@@ -105,10 +99,10 @@
 
 ### Validity Gating
 - [x] Create `ValidityGates` class
-- [x] Implement flatness gate (λ3 / Σλ < 0.20 with 0.05 hysteresis) **CORRECTED**
+- [x] Implement flatness gate (current: 0.30 with 0.05 hysteresis)
 - [x] Implement signal strength gate (5.0 < λ1 < 10000.0 μT²)
-- [x] Implement frequency gate (< 10Hz with 10-sample debouncing)
-- [x] Implement motion gate (> 0.0001 rad/sample with 50-sample averaging)
+- [x] Implement frequency gate (< 10Hz with debouncing)
+- [x] Implement motion gate (current: 0.000005 rad/sample, 2s averaging)
 - [x] Add configurable threshold parameters
 - [ ] Write unit tests for each gate independently
 - [x] Test combined gating logic
@@ -161,6 +155,8 @@
 - [x] Add rotation count callback with absolute value tracking **FIXED**
 - [ ] Add noise floor calibration on first launch
 - [x] Test switching between PCA and legacy modes
+- [x] Use uncalibrated magnetometer EventChannel (Android) and error when unsupported
+- [x] Auto-start listening/recording and restart after Settings
 
 ### Settings Model Updates
 - [x] Add `useLegacyDetection` setting (default: false = PCA)
@@ -191,12 +187,12 @@
 - [ ] Update help text
 
 ### UI Updates - Main Screen
-- [ ] Add signal quality badge/indicator
-- [ ] Update magnetometer readout to show X, Y, Z values
+- [x] Signal quality indicator for PCA
+- [x] Magnetic field bar (uncalibrated)
 - [ ] Add visual feedback for rotation detection (flash/animation)
 - [ ] Add algorithm name display (debug mode only)
 
-## Phase 6: Testing & Validation (Week 6-7)
+## Phase 6: Testing & Validation (Week 6-7) — Not started
 
 ### Unit Tests
 - [ ] Test BaselineRemoval with synthetic drift
@@ -268,7 +264,7 @@
 - [ ] Compare to legacy threshold algorithm
 - [ ] Target: <5% additional battery drain
 
-## Phase 7: Documentation & Polish (Week 7)
+## Phase 7: Documentation & Polish (Week 7) — Not started
 
 ### Code Documentation
 - [ ] Add comprehensive dartdoc comments to all public APIs
@@ -299,7 +295,7 @@
 - [ ] Add error handling for edge cases
 - [ ] Security review (none expected for this change)
 
-## Phase 8: Beta Testing & Release
+## Phase 8: Beta Testing & Release — Not started
 
 ### Beta Preparation
 - [ ] Create feature flag for gradual rollout
@@ -416,10 +412,10 @@ Before considering this change complete, verify:
 
 ## Notes
 
-- Focus on PCA algorithm only - ignore ML/FFT approaches from original spec
-- Eigenvalue decomposition is critical - test ml_linalg library early
+- Focus on PCA algorithm only - ignore ML/FFT approaches from original spec for this change
+- Uncalibrated magnetometer input is required for reliable detection
 - Real-world testing is essential - synthetic data validates logic, not physics
-- Keep legacy threshold mode as permanent fallback option
+- Keep legacy threshold mode as permanent fallback option (uncalibrated feed)
 - Signal quality indicator is key UX feature - make it prominent
 - Document all tuning parameters for future optimization
 
