@@ -6,6 +6,7 @@ import '../services/compass_service.dart';
 import '../services/storage_service.dart';
 import '../services/export_service.dart';
 import '../services/button_customization_service.dart';
+import '../services/rotation_detection/rotation_algorithm.dart';
 import '../models/settings.dart';
 import '../widgets/positioned_button.dart';
 import '../widgets/monospaced_text.dart';
@@ -35,12 +36,21 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
+    print('[MAIN_SCREEN] initState called');
     // Start sensor services when screen loads
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      print('[MAIN_SCREEN] PostFrameCallback executing');
       final magnetometerService = context.read<MagnetometerService>();
       final compassService = context.read<CompassService>();
+      final settings = context.read<Settings>();
 
-      magnetometerService.startListening();
+      // Sync algorithm selection from settings
+      magnetometerService.setAlgorithm(settings.rotationAlgorithm);
+      print('[MAIN_SCREEN] Algorithm set to: ${settings.rotationAlgorithm}');
+
+      // Auto-start recording when on main screen (old behavior)
+      magnetometerService.startRecording();
+      print('[MAIN_SCREEN] Called startRecording()');
       compassService.startListening();
 
       // Update magnetometer heading whenever compass changes
@@ -93,20 +103,31 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _navigateToSettings() async {
-    // Stop sensors before navigating to settings
-    context.read<MagnetometerService>().stopListening();
-    context.read<CompassService>().stopListening();
+    final magnetometer = context.read<MagnetometerService>();
+    final compass = context.read<CompassService>();
+    final wasRecording = magnetometer.isRecording;
+
+    // Pause sensors while in settings
+    magnetometer.stopRecording();
+    magnetometer.stopListening();
+    compass.stopListening();
 
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const SettingsScreen()),
     );
 
-    // Restart sensors after returning from settings
-    if (mounted) {
-      context.read<MagnetometerService>().startListening();
-      context.read<CompassService>().startListening();
+    if (!mounted) return;
+
+    // Resume sensors after returning (regardless of OK/Cancel)
+    magnetometer.startListening();
+    if (wasRecording) {
+      magnetometer.startRecording(
+        initialDepth: magnetometer.currentDepth,
+        initialHeading: compass.heading,
+      );
     }
+    compass.startListening();
   }
 
   void _onResetTapDown() {
@@ -318,9 +339,11 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
 
                           // Magnetic strength indicator
                           _buildMagneticStrengthIndicator(
-                            magnetometer.magneticStrength,
+                            magnetometer.uncalibratedMagnitude,
                             settings.minPeakThreshold,
                             settings.maxPeakThreshold,
+                            magnetometer.algorithm,
+                            magnetometer.signalQuality,
                           ),
 
                           // Spacer to push buttons to bottom
@@ -400,7 +423,15 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
     double strength,
     double minThreshold,
     double maxThreshold,
+    RotationAlgorithm algorithm,
+    double signalQuality,
   ) {
+    // For PCA algorithm, show signal quality instead
+    if (algorithm == RotationAlgorithm.pca) {
+      return _buildPCASignalQuality(signalQuality);
+    }
+
+    // Legacy threshold algorithm display (using uncalibrated magnitude)
     // Calculate display range: 0 to maxThreshold + 20%
     final displayMax = maxThreshold * 1.2;
     final normalizedStrength = (strength / displayMax).clamp(0.0, 1.0);
@@ -443,4 +474,54 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
       ],
     );
   }
+
+  Widget _buildPCASignalQuality(double quality) {
+    final percentage = (quality * 100).round();
+
+    Color qualityColor;
+    String qualityText;
+
+    if (quality >= 0.7) {
+      qualityColor = AppColors.statusGood;
+      qualityText = 'Excellent';
+    } else if (quality >= 0.5) {
+      qualityColor = Colors.blue;
+      qualityText = 'Good';
+    } else if (quality >= 0.3) {
+      qualityColor = Colors.orange;
+      qualityText = 'Fair';
+    } else {
+      qualityColor = Colors.red;
+      qualityText = 'Poor';
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Signal Quality',
+          style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: 200,
+          child: LinearProgressIndicator(
+            value: quality,
+            backgroundColor: AppColors.backgroundSecondary,
+            valueColor: AlwaysStoppedAnimation<Color>(qualityColor),
+            minHeight: 8,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '$qualityText ($percentage%)',
+          style: AppTextStyles.caption.copyWith(
+            color: qualityColor,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
 }

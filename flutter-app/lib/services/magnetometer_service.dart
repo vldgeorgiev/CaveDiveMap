@@ -4,6 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import '../models/survey_data.dart';
 import 'storage_service.dart';
+import 'rotation_detection/rotation_algorithm.dart';
+import 'rotation_detection/pca_rotation_detector.dart';
+import 'rotation_detection/vector3.dart';
+import 'uncalibrated_magnetometer.dart';
 
 /// Service for magnetometer-based distance measurement.
 ///
@@ -20,9 +24,13 @@ class MagnetometerService extends ChangeNotifier {
   final StorageService _storageService;
 
   StreamSubscription<MagnetometerEvent>? _magnetometerSubscription;
+  StreamSubscription<GyroscopeEvent>? _gyroscopeSubscription;
+  StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
+  StreamSubscription<Map<String, double>>? _uncalibratedMagSubscription;
 
   // Measurement state
-  bool _isRecording = false;
+  bool _isListening = false; // Magnetometer active
+  bool _isRecording = false; // Actively counting rotations
   double _currentDistance = 0.0;
   double _currentDepth = 0.0;
   double _currentHeading = 0.0;
@@ -33,6 +41,10 @@ class MagnetometerService extends ChangeNotifier {
   double _magnetometerX = 0.0;
   double _magnetometerY = 0.0;
   double _magnetometerZ = 0.0;
+  double _uncalibratedX = 0.0;
+  double _uncalibratedY = 0.0;
+  double _uncalibratedZ = 0.0;
+  double _uncalibratedMagnitude = 0.0;
 
   // Settings
   double _wheelCircumference = 0.263; // meters
@@ -40,6 +52,14 @@ class MagnetometerService extends ChangeNotifier {
   double _maxPeakThreshold = 100.0; // μT - must exceed this to trigger peak
   bool _isReadyForNewPeak = true; // State tracker for peak detection
   int _rotationCount = 0;
+
+  // Algorithm selection
+  RotationAlgorithm _algorithm = RotationAlgorithm.threshold;
+  PCARotationDetector? _pcaDetector;
+  bool _uncalibratedActive = false;
+  bool _uncalibratedSupported = true;
+  String? _uncalibratedError;
+  int _lastUncalibratedMs = 0;
 
   // Performance optimization
   int _samplesSinceUIUpdate = 0;
@@ -63,6 +83,11 @@ class MagnetometerService extends ChangeNotifier {
     if (_storageService.surveyPoints.isNotEmpty) {
       _currentDistance = _storageService.surveyPoints.last.distance;
     }
+
+    // Auto-start listening and recording since the app has no manual start
+    // control. This ensures rotation detection begins immediately on launch.
+    startListening();
+    startRecording();
   }
 
   // Getters
@@ -77,36 +102,62 @@ class MagnetometerService extends ChangeNotifier {
   double get magnetometerX => _magnetometerX;
   double get magnetometerY => _magnetometerY;
   double get magnetometerZ => _magnetometerZ;
+  double get uncalibratedX => _uncalibratedX;
+  double get uncalibratedY => _uncalibratedY;
+  double get uncalibratedZ => _uncalibratedZ;
+  double get uncalibratedMagnitude => _uncalibratedMagnitude;
+  bool get uncalibratedSupported => _uncalibratedSupported;
+  String? get uncalibratedError => _uncalibratedError;
+  RotationAlgorithm get algorithm => _algorithm;
+  PCARotationDetector? get pcaDetector => _pcaDetector;
+
+  /// Signal quality [0.0, 1.0] for PCA algorithm (0.0 for threshold).
+  double get signalQuality {
+    return _algorithm == RotationAlgorithm.pca
+        ? (_pcaDetector?.signalQuality ?? 0.0)
+        : 0.0;
+  }
 
   /// Start magnetometer recording
   void startRecording({
     double initialDepth = 0.0,
     double initialHeading = 0.0,
   }) {
-    if (_isRecording) return;
+    print('[MAG] startRecording() called | _isRecording=$_isRecording | _isListening=$_isListening');
+    if (_isRecording) {
+      print('[MAG] Already recording, returning early');
+      return;
+    }
+
+    // Start listening if not already
+    if (!_isListening) {
+      print('[MAG] Not listening, calling startListening()');
+      startListening();
+    }
 
     _isRecording = true;
+    print('[MAG] 🔴 Started recording | Algorithm: $_algorithm | Initial distance: $_currentDistance m');
     // Don't reset _currentDistance - it should be cumulative
     _currentDepth = initialDepth;
     _currentHeading = initialHeading;
     _rotationCount = 0;
     _lastRotationTime = null;
 
-    // Subscribe to magnetometer at ~100Hz for better fast rotation detection
-    // Note: Actual rate may be limited by hardware capabilities
-    _magnetometerSubscription = magnetometerEventStream(
-      samplingPeriod: const Duration(milliseconds: 10),
-    ).listen(_onMagnetometerEvent);
+    // Reset PCA detector for fresh rotation counting
+    if (_algorithm == RotationAlgorithm.pca && _pcaDetector != null) {
+      _pcaDetector!.reset();
+      print('[MAG] 🔄 PCA detector reset');
+    } else if (_algorithm == RotationAlgorithm.pca) {
+      print('[MAG] ⚠️ PCA algorithm selected but detector is null!');
+    }
 
     notifyListeners();
+    print('[MAG] startRecording() complete | _isRecording=$_isRecording');
   }
 
-  /// Stop magnetometer recording
+  /// Stop magnetometer recording (but keep listening for quality feedback)
   void stopRecording() {
     _isRecording = false;
-    _magnetometerSubscription?.cancel();
-    _magnetometerSubscription = null;
-
     notifyListeners();
   }
 
@@ -158,14 +209,75 @@ class MagnetometerService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Start listening to sensors
+  /// Start listening to sensors (for quality feedback without recording)
   void startListening() {
-    startRecording();
+    if (_isListening) return;
+
+    _isListening = true;
+    print('[MAG] 🎧 Started listening | Algorithm: $_algorithm');
+
+    // Initialize PCA detector if using PCA algorithm
+    if (_algorithm == RotationAlgorithm.pca && _pcaDetector == null) {
+      _pcaDetector = PCARotationDetector();
+      _pcaDetector!.addListener(_onPCARotationCountChanged);
+      _pcaDetector!.start();
+      print('[MAG] 🔧 PCA detector initialized and started');
+    }
+
+    // Subscribe to magnetometer at ~100Hz
+    _magnetometerSubscription = magnetometerEventStream(
+      samplingPeriod: const Duration(milliseconds: 10),
+    ).listen(_onMagnetometerEvent);
+
+    // Uncalibrated magnetometer (Android only; falls back silently elsewhere)
+    _uncalibratedMagSubscription = UncalibratedMagnetometer.events.listen(
+      _onUncalibratedMagnetometerEvent,
+      onError: (e) {
+        _uncalibratedSupported = false;
+        _uncalibratedError = 'Uncalibrated magnetometer not available: $e';
+        print('[MAG] ❌ $_uncalibratedError');
+        notifyListeners();
+      },
+    );
+
+    // Inertial sensors for figure-8 rejection (gyro/accel)
+    _gyroscopeSubscription = gyroscopeEventStream(
+      samplingPeriod: const Duration(milliseconds: 10),
+    ).listen((event) {
+      _pcaDetector?.updateInertial(null, Vector3(event.x, event.y, event.z));
+    });
+    _accelerometerSubscription = accelerometerEventStream(
+      samplingPeriod: const Duration(milliseconds: 10),
+    ).listen((event) {
+      _pcaDetector?.updateInertial(Vector3(event.x, event.y, event.z), null);
+    });
+
+    notifyListeners();
   }
 
-  /// Stop listening to sensors
+  /// Stop listening to sensors completely
   void stopListening() {
-    stopRecording();
+    _isListening = false;
+    _isRecording = false;
+    _magnetometerSubscription?.cancel();
+    _magnetometerSubscription = null;
+    _uncalibratedMagSubscription?.cancel();
+    _uncalibratedMagSubscription = null;
+    _gyroscopeSubscription?.cancel();
+    _gyroscopeSubscription = null;
+    _accelerometerSubscription?.cancel();
+    _accelerometerSubscription = null;
+
+    // Stop PCA detector if active
+    if (_pcaDetector != null) {
+      _pcaDetector!.removeListener(_onPCARotationCountChanged);
+      _pcaDetector!.stop();
+    _pcaDetector = null;
+    _uncalibratedActive = false;
+    _lastUncalibratedMs = 0;
+    }
+
+    notifyListeners();
   }
 
   /// Update current heading (from compass service)
@@ -186,6 +298,34 @@ class MagnetometerService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Set rotation detection algorithm
+  void setAlgorithm(RotationAlgorithm algorithm) {
+    if (_algorithm == algorithm) return;
+
+    final wasListening = _isListening;
+    final wasRecording = _isRecording;
+
+    // Stop everything
+    if (wasListening) {
+      stopListening();
+    }
+
+    _algorithm = algorithm;
+
+    // Restart if was listening
+    if (wasListening) {
+      startListening();
+      if (wasRecording) {
+        startRecording(
+          initialDepth: _currentDepth,
+          initialHeading: _currentHeading,
+        );
+      }
+    }
+
+    notifyListeners();
+  }
+
   /// Process magnetometer event for peak detection
   void _onMagnetometerEvent(MagnetometerEvent event) {
     // Store raw values
@@ -200,6 +340,45 @@ class MagnetometerService extends ChangeNotifier {
 
     _magneticStrength = magnitude;
 
+    // Throttle UI updates to avoid overwhelming the UI thread
+    // Only notify listeners every N samples instead of on every reading
+    _samplesSinceUIUpdate++;
+    if (_samplesSinceUIUpdate >= _uiUpdateInterval) {
+      _samplesSinceUIUpdate = 0;
+      notifyListeners();
+    }
+  }
+
+  void _onUncalibratedMagnetometerEvent(Map<String, double> data) {
+    final x = data['x'] ?? 0.0;
+    final y = data['y'] ?? 0.0;
+    final z = data['z'] ?? 0.0;
+    _uncalibratedX = x;
+    _uncalibratedY = y;
+    _uncalibratedZ = z;
+    _uncalibratedMagnitude = sqrt(x * x + y * y + z * z);
+    _uncalibratedActive = true;
+    _lastUncalibratedMs = DateTime.now().millisecondsSinceEpoch;
+
+    // Feed detectors with uncalibrated data when selected
+    if (_algorithm == RotationAlgorithm.pca && _pcaDetector != null) {
+      _processPCAAlgorithm(x, y, z);
+    } else if (_algorithm == RotationAlgorithm.threshold) {
+      _processThresholdAlgorithm(_uncalibratedMagnitude);
+    }
+  }
+
+  /// Process sample with PCA algorithm
+  void _processPCAAlgorithm(double x, double y, double z) {
+    if (_pcaDetector == null) return;
+
+    final vector = Vector3(x, y, z);
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    _pcaDetector!.processSample(vector, timestamp);
+  }
+
+  /// Process sample with threshold algorithm
+  void _processThresholdAlgorithm(double magnitude) {
     // Track recent maximum to catch fast peaks
     if (magnitude > _recentMaxMagnitude) {
       _recentMaxMagnitude = magnitude;
@@ -218,8 +397,11 @@ class MagnetometerService extends ChangeNotifier {
     // 1. Goes ABOVE maxPeakThreshold (use recent max for fast peaks)
     // 2. Then drops BELOW minPeakThreshold (ready for next peak)
     if (_isReadyForNewPeak && _recentMaxMagnitude > _maxPeakThreshold) {
-      // Peak detected - count rotation
-      _onRotationDetected();
+      // Peak detected - count rotation (only if recording)
+      if (_isRecording) {
+        _rotationCount++;
+        _onRotationDetected();
+      }
       _isReadyForNewPeak = false;
       _recentMaxMagnitude = 0.0; // Reset buffer after detection
     } else if (!_isReadyForNewPeak && magnitude < _minPeakThreshold) {
@@ -227,19 +409,37 @@ class MagnetometerService extends ChangeNotifier {
       _isReadyForNewPeak = true;
       _recentMaxMagnitude = magnitude;
     }
+  }
 
-    // Throttle UI updates to avoid overwhelming the UI thread
-    // Only notify listeners every N samples instead of on every reading
-    _samplesSinceUIUpdate++;
-    if (_samplesSinceUIUpdate >= _uiUpdateInterval) {
-      _samplesSinceUIUpdate = 0;
-      notifyListeners();
+  /// Handle PCA detector rotation count changes
+  void _onPCARotationCountChanged() {
+    if (_pcaDetector == null) {
+      print('[MAG] ⚠️ PCA rotation callback but detector is null');
+      return;
+    }
+
+    if (!_isRecording) {
+      print('[MAG] ⚠️ PCA rotation detected but not recording (listening only)');
+      return;
+    }
+
+    // Use absolute rotation count since we only care about distance traveled
+    final newCount = _pcaDetector!.rotationCount.abs();
+    if (newCount > _rotationCount) {
+      final rotationsToAdd = newCount - _rotationCount;
+      print('[MAG] 🎯 Adding $rotationsToAdd rotation(s): $_rotationCount -> $newCount | Distance: $_currentDistance -> ${_currentDistance + (rotationsToAdd * _wheelCircumference)} m');
+      _rotationCount = newCount;
+
+      // Call _onRotationDetected for each new rotation
+      for (int i = 0; i < rotationsToAdd; i++) {
+        _onRotationDetected();
+      }
     }
   }
 
   /// Handle rotation detection
   void _onRotationDetected() {
-    _rotationCount++;
+    // Note: _rotationCount already incremented by caller
 
     // Update rotation timing statistics
     final now = DateTime.now();

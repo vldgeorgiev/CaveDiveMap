@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'dart:math';
 import 'dart:convert';
+import '../services/rotation_detection/rotation_algorithm.dart';
 
 /// Application settings model
 class Settings extends ChangeNotifier {
@@ -10,6 +11,7 @@ class Settings extends ChangeNotifier {
   String _surveyName;
   bool _keepScreenOn;
   bool _fullscreen;
+  RotationAlgorithm _rotationAlgorithm;
 
   Settings({
     double wheelDiameter = 0.043, // Default 43mm diameter wheel
@@ -18,12 +20,14 @@ class Settings extends ChangeNotifier {
     String surveyName = 'survey',
     bool keepScreenOn = true, // Default: keep screen on during surveys
     bool fullscreen = true, // Default: fullscreen mode enabled
+    RotationAlgorithm rotationAlgorithm = RotationAlgorithm.threshold,
   }) : _wheelDiameter = wheelDiameter,
        _minPeakThreshold = minPeakThreshold,
        _maxPeakThreshold = maxPeakThreshold,
        _surveyName = surveyName,
        _keepScreenOn = keepScreenOn,
-       _fullscreen = fullscreen;
+       _fullscreen = fullscreen,
+       _rotationAlgorithm = rotationAlgorithm;
 
   // Getters
   double get wheelDiameter => _wheelDiameter;
@@ -33,6 +37,7 @@ class Settings extends ChangeNotifier {
   String get surveyName => _surveyName;
   bool get keepScreenOn => _keepScreenOn;
   bool get fullscreen => _fullscreen;
+  RotationAlgorithm get rotationAlgorithm => _rotationAlgorithm;
 
   // Update methods
   void updateWheelDiameter(double value) {
@@ -65,6 +70,11 @@ class Settings extends ChangeNotifier {
     notifyListeners();
   }
 
+  void updateRotationAlgorithm(RotationAlgorithm value) {
+    _rotationAlgorithm = value;
+    notifyListeners();
+  }
+
   // Serialization
   Map<String, dynamic> toJson() {
     return {
@@ -74,6 +84,7 @@ class Settings extends ChangeNotifier {
       'surveyName': _surveyName,
       'keepScreenOn': _keepScreenOn,
       'fullscreen': _fullscreen,
+      'rotationAlgorithm': _rotationAlgorithm.name,
     };
   }
 
@@ -85,7 +96,17 @@ class Settings extends ChangeNotifier {
       surveyName: json['surveyName'] as String? ?? 'survey',
       keepScreenOn: json['keepScreenOn'] as bool? ?? true,
       fullscreen: json['fullscreen'] as bool? ?? true,
+      rotationAlgorithm: _parseAlgorithm(json['rotationAlgorithm'] as String?),
     );
+  }
+
+  static RotationAlgorithm _parseAlgorithm(String? value) {
+    if (value == null) return RotationAlgorithm.threshold;
+    try {
+      return RotationAlgorithm.values.firstWhere((e) => e.name == value);
+    } catch (_) {
+      return RotationAlgorithm.threshold;
+    }
   }
 
   // JSON string serialization for SharedPreferences
