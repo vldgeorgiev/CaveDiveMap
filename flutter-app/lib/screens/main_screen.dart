@@ -346,10 +346,6 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
                             magnetometer.signalQuality,
                           ),
 
-                          // Debug panel for PCA
-                          if (magnetometer.algorithm == RotationAlgorithm.pca)
-                            _buildDebugPanel(magnetometer),
-
                           // Spacer to push buttons to bottom
                           const Spacer(),
                         ],
@@ -528,58 +524,4 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildDebugPanel(MagnetometerService service) {
-    final detector = service.pcaDetector;
-    if (detector == null) {
-      return Card(
-        margin: const EdgeInsets.only(top: 12),
-        color: AppColors.backgroundSecondary,
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Text('🔴 PCA Detector: Not initialized',
-              style: AppTextStyles.caption.copyWith(color: Colors.red)),
-        ),
-      );
-    }
-
-    return Card(
-      margin: const EdgeInsets.only(top: 12),
-      color: AppColors.backgroundSecondary,
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('🔬 PCA Debug',
-                style: AppTextStyles.caption.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                )),
-            const SizedBox(height: 8),
-            Text('Detector: ${detector.isActive ? "✓" : "✗"}',
-                style: AppTextStyles.caption.copyWith(fontSize: 11)),
-            Text('Recording: ${service.isRecording ? "✓" : "✗"}',
-                style: AppTextStyles.caption.copyWith(fontSize: 11)),
-            Text('PCA Count: ${detector.rotationCount}',
-                style: AppTextStyles.caption.copyWith(fontSize: 11)),
-            Text('Svc Count: ${service.rotationCount}',
-                style: AppTextStyles.caption.copyWith(fontSize: 11)),
-            Text(
-                'Quality: ${(detector.signalQuality * 100).toStringAsFixed(1)}%',
-                style: AppTextStyles.caption.copyWith(fontSize: 11)),
-            Text(
-                'Raw: (${service.magnetometerX.toStringAsFixed(1)}, '
-                '${service.magnetometerY.toStringAsFixed(1)}, '
-                '${service.magnetometerZ.toStringAsFixed(1)}) μT',
-                style: AppTextStyles.caption.copyWith(fontSize: 11)),
-            const SizedBox(height: 4),
-            Text('📋 See Flutter logs for detailed metrics',
-                style: AppTextStyles.caption
-                    .copyWith(fontSize: 10, fontStyle: FontStyle.italic)),
-          ],
-        ),
-      ),
-    );
-  }
 }
