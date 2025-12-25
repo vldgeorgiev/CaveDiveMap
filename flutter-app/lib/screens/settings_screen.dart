@@ -48,7 +48,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     // Start magnetometer and compass services for live sensor readout
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<MagnetometerService>().startListening();
+      final mag = context.read<MagnetometerService>();
+      mag.stopRecording(); // ensure no counting while in settings
+      mag.startListening();
       context.read<CompassService>().startListening();
     });
   }

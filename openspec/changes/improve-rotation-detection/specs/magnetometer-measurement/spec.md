@@ -111,6 +111,22 @@ The algorithm SHALL implement automatic validity gates (planarity, signal streng
 **Then** the gate SHALL reject the signal  
 **And** no rotation SHALL be counted until coherence improves
 
+#### Scenario: Inertial gate allows gentle forward movement
+
+**Given** the phone is moving steadily forward with the wheel (e.g., pulled by a rope)  
+**And** gyro/accelerometer readings stay within normal walking/handling ranges  
+**When** inertial gating evaluates the signal alongside planarity and coherence  
+**Then** the gate SHALL allow rotation counts to continue  
+**And** no rotations SHALL be missed due to normal hand/rope motion
+
+#### Scenario: Inertial gate rejects figure-8 handset motion
+
+**Given** the user moves the phone in a figure-8 without the wheel rotating  
+**And** gyro/accelerometer readings exceed the motion stability bounds  
+**When** inertial gating evaluates the signal  
+**Then** the gate SHALL reject the signal  
+**And** no rotations SHALL be counted
+
 ---
 
 ### Requirement: Sliding Window PCA (REQ-MAG-004)
@@ -248,7 +264,7 @@ The system SHALL use uncalibrated magnetometer readings (e.g., Android `TYPE_MAG
 
 **Given** the device exposes `TYPE_MAGNETIC_FIELD_UNCALIBRATED`  
 **When** the magnetometer service starts  
-**Then** PCA and legacy detectors SHALL consume uncalibrated x/y/z values only  
+**Then** PCA and threshold detectors SHALL consume uncalibrated x/y/z values only  
 **And** calibrated values SHALL NOT be used for detection
 
 #### Scenario: Uncalibrated data not supported
@@ -264,15 +280,15 @@ The system SHALL use uncalibrated magnetometer readings (e.g., Android `TYPE_MAG
 
 ### Requirement: Configurable Detection Thresholds (REQ-MAG-008)
 
-Manual threshold configuration SHALL be available only in legacy mode for backward compatibility. PCA phase tracking SHALL NOT require or expose threshold parameters to users.
+Manual threshold configuration SHALL be available only in threshold mode (default). PCA phase tracking SHALL NOT require or expose threshold parameters to users.
 
 **Priority**: SHOULD
 
-**Change Summary**: Changed from MUST configure (previous: manual threshold configuration required) to legacy-only (new: PCA is zero-configuration)
+**Change Summary**: Changed from MUST configure (previous: manual threshold configuration required) to threshold-only (default) while PCA is zero-configuration beta
 
 **Rationale**: PCA algorithm is inherently self-calibrating through automatic baseline removal and validity gates, eliminating need for manual thresholds.
 
-**Verification**: Verify PCA mode operates without threshold settings; verify legacy mode still supports manual thresholds.
+**Verification**: Verify PCA mode operates without threshold settings; verify threshold mode still supports manual thresholds.
 
 #### Scenario: PCA mode hides threshold controls
 
@@ -282,10 +298,10 @@ Manual threshold configuration SHALL be available only in legacy mode for backwa
 **And** only wheel circumference input SHALL be required  
 **And** signal quality indicator SHALL be displayed instead
 
-#### Scenario: Legacy mode shows threshold controls
+#### Scenario: Threshold mode shows threshold controls
 
-**Given** user selects "Classic Detection Mode" in settings  
-**When** legacy threshold algorithm is active  
+**Given** user selects "Classic/Threshold Detection Mode" in settings  
+**When** threshold algorithm is active (default)  
 **Then** min/max threshold sliders SHALL be visible  
 **And** SHALL function identically to previous app versions  
 **And** user CAN configure thresholds as before
@@ -298,7 +314,7 @@ The app SHALL default to threshold-based detection with optional PCA phase track
 
 **Priority**: MUST
 
-**Change Summary**: Default is threshold; PCA is an opt-in beta. Threshold is not considered legacy and remains supported.
+**Change Summary**: Default is threshold; PCA is an opt-in beta. Threshold is not legacy and remains supported.
 
 **Rationale**: Threshold mode is simple and configurable; PCA offers orientation independence but is still in beta. Users can switch based on preference and device behavior.
 
@@ -322,7 +338,7 @@ The app SHALL default to threshold-based detection with optional PCA phase track
 
 ## REMOVED Requirements
 
-None - all existing functionality is preserved in legacy mode.
+None - all existing functionality is preserved in threshold mode.
 
 ---
 
@@ -364,13 +380,4 @@ All scenarios defined above SHALL have corresponding automated tests where possi
 - **Data Format**: Existing survey data SHALL load without modification
 - **Legacy Mode**: Previous threshold-based detection SHALL remain available
 - **Export Formats**: CSV and Therion exports SHALL remain compatible
-- **Settings Migration**: Existing threshold settings SHALL be preserved and used in legacy mode
-
----
-
-## Security & Privacy
-
-- **Model Integrity**: ML model files SHALL be verified at load time (checksum)
-- **Data Collection**: User data collection for model training SHALL be opt-in only
-- **Local Processing**: All detection SHALL occur on-device; no cloud communication required
-- **Telemetry**: Anonymous algorithm performance metrics MAY be collected with user consent
+- **Settings Migration**: Existing threshold settings SHALL be preserved and used in threshold mode

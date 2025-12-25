@@ -37,6 +37,11 @@ class PCARotationConfig {
   /// signal remains strong. This improves counting when rotation is jerky.
   final int planarGraceMs;
 
+  /// How long (ms) we keep allowing counts after inertial gate fails.
+  /// Provides tolerance for gentle translation (e.g., phone moving forward with the wheel)
+  /// while still rejecting sustained figure-8 or large handset motion.
+  final int inertialGraceMs;
+
   /// Maximum allowable gyro magnitude (rad/s) before rejecting due to large
   /// handset motion (e.g., figure-8 swings).
   final double maxGyroRadPerSec;
@@ -55,6 +60,7 @@ class PCARotationConfig {
     this.baselineAlpha = 0.02,
     this.pausedBaselineAlpha = 0.001,
     this.planarGraceMs = 1200,
+    this.inertialGraceMs = 800,
     this.maxGyroRadPerSec = 6.0,
     this.maxAccelStdDev = 4.0,
     this.validityConfig = const ValidityGateConfig(),
@@ -91,8 +97,10 @@ class PCARotationDetector extends ChangeNotifier {
   static const int _inertialHistorySize = 100; // ~1s at 100Hz
 
   // State
-  int _rotationCount = 0; // emitted count
-  int _maxAbsRotationCount = 0;  // Track max absolute emitted count to prevent oscillation
+  int _rotationCount = 0; // emitted forward count (for consumers)
+  int _forwardCount = 0;  // internal forward emissions
+  double _forwardPhaseAccum = 0.0; // cumulative positive phase (rad) for forward counts only
+  int _forwardSign = 0; // +1/-1 once direction is learned, 0 = unknown
   PCAResult? _latestPCA;
   PCAResult? _lockedPCA;
   ValidityGateResult? _latestValidity;
@@ -299,7 +307,6 @@ class PCARotationDetector extends ChangeNotifier {
     // Debug: Log PCA metrics every 50 samples
     if (_debugSampleCount % 80 == 0) {
       final eigenvalues = _latestPCA!.eigenvalues;
-      final isSaturated = _latestPCA!.signalStrength > 10000.0;
       final signalStdDev = sqrt(_latestPCA!.signalStrength);
       final lambda2Ratio = eigenvalues[1] / eigenvalues[0];
       final lambda3Ratio = eigenvalues[2] / eigenvalues[0];
@@ -322,22 +329,66 @@ class PCARotationDetector extends ChangeNotifier {
     // emit when gates pass.
     final withinPlanarGrace = _lastPlanarStrongTimestampMs != 0 &&
         (timestamp - _lastPlanarStrongTimestampMs) <= config.planarGraceMs;
-    final canEmit = _latestValidity!.qualityScore > 0.50 &&
+    final inertialOkNow = _inertialOk;
+    if (inertialOkNow) {
+      _lastInertialOkMs = timestamp;
+    }
+    final withinInertialGrace = _lastInertialOkMs != 0 &&
+        (timestamp - _lastInertialOkMs) <= config.inertialGraceMs;
+
+    final canEmit = _latestValidity!.qualityScore > 0.60 &&
         _latestValidity!.isWithinFrequencyLimit &&
         (_latestValidity!.isPlanar || withinPlanarGrace) &&
-        (_latestValidity!.hasPhaseMotion || withinPlanarGrace);
+        _latestValidity!.hasPhaseMotion &&
+        _latestValidity!.hasCoherentMotion &&
+        _latestValidity!.hasStrongSignal &&
+        (inertialOkNow || withinInertialGrace); // reject sustained figure-8 / large handset motion, allow gentle translation
 
-    final pendingAbs = (_phaseUnwrapper.totalPhase.abs() / (2 * 3.141592653589793)).floor();
-    if (canEmit && pendingAbs > _maxAbsRotationCount) {
-      final newCount = pendingAbs * (_phaseUnwrapper.totalPhase >= 0 ? 1 : -1);
+    // Learn which direction is "forward" from the first stable motion (planar + coherent).
+    if (_forwardSign == 0 &&
+        _latestValidity != null &&
+        _latestValidity!.hasPhaseMotion &&
+        phaseChange.abs() > 0.02) {
+      _forwardSign = phaseChange > 0 ? 1 : -1;
+      _forwardPhaseAccum = 0.0;
+    }
+
+    // Accumulate only forward-directed phase (relative to learned sign).
+    final signedPhaseChange =
+        _forwardSign == 0 ? phaseChange : phaseChange * _forwardSign;
+    if (signedPhaseChange > 0) {
+      _forwardPhaseAccum += signedPhaseChange;
+    }
+    final twoPi = 2 * 3.141592653589793;
+    int pendingForward = 0;
+    if (canEmit) {
+      pendingForward = (_forwardPhaseAccum / twoPi).floor();
+    }
+
+    // Debug: show why counts may be blocked
+    if (_debugSampleCount % 100 == 0) {
+      print('[PCA-EMIT] canEmit=$canEmit '
+            'sign=$_forwardSign '
+            'accum=${_forwardPhaseAccum.toStringAsFixed(2)}rad '
+            'pending=$pendingForward '
+            'q=${_latestValidity!.qualityScore.toStringAsFixed(2)} '
+            'planar=${_latestValidity!.isPlanar} '
+            'phaseMotion=${_latestValidity!.hasPhaseMotion} '
+            'coherent=${_latestValidity!.hasCoherentMotion} '
+            'strong=${_latestValidity!.hasStrongSignal} '
+            'inertialOk=$inertialOkNow grace=$withinInertialGrace');
+    }
+
+    if (pendingForward > 0) {
+      _forwardPhaseAccum -= pendingForward * twoPi;
+      _forwardCount += pendingForward;
+      _rotationCount = _forwardCount; // expose forward-only
       final phaseDeg = phase * 180 / 3.14159;
       final unwrappedDeg = _phaseUnwrapper.totalPhase * 180 / 3.14159;
-      print('[PCA] 🎯 ROTATION DETECTED! Count: $newCount (abs=$pendingAbs, was ${_maxAbsRotationCount}) ✓ | '
+      print('[PCA] 🎯 ROTATION DETECTED! ForwardCount: $_forwardCount (pending=+$pendingForward) ✓ | '
             'Phase: ${phaseDeg.toStringAsFixed(1)}° | '
             'Unwrapped: ${unwrappedDeg.toStringAsFixed(1)}° | '
             'Projected: (${_lastProjected.x.toStringAsFixed(2)}, ${_lastProjected.y.toStringAsFixed(2)})');
-      _maxAbsRotationCount = pendingAbs;
-      _rotationCount = newCount;
       notifyListeners();
     }
   }
@@ -375,7 +426,9 @@ class PCARotationDetector extends ChangeNotifier {
   /// Reset all state (rotation count, buffers, etc.).
   void reset() {
     _rotationCount = 0;
-    _maxAbsRotationCount = 0;
+    _forwardCount = 0;
+    _forwardPhaseAccum = 0.0;
+    _forwardSign = 0;
     _latestPCA = null;
     _lockedPCA = null;
     _latestValidity = null;

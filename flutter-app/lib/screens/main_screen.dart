@@ -103,22 +103,31 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _navigateToSettings() async {
-    // Stop sensors before navigating to settings
-    context.read<MagnetometerService>().stopListening();
-    context.read<CompassService>().stopListening();
+    final magnetometer = context.read<MagnetometerService>();
+    final compass = context.read<CompassService>();
+    final wasRecording = magnetometer.isRecording;
+
+    // Pause sensors while in settings
+    magnetometer.stopRecording();
+    magnetometer.stopListening();
+    compass.stopListening();
 
     await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const SettingsScreen()),
     );
 
-    // Restart sensors after returning from settings
-    if (mounted) {
-      final magnetometer = context.read<MagnetometerService>();
-      magnetometer.startListening();
-      magnetometer.startRecording(); // ensure recording resumes after stopListening()
-      context.read<CompassService>().startListening();
+    if (!mounted) return;
+
+    // Resume sensors after returning (regardless of OK/Cancel)
+    magnetometer.startListening();
+    if (wasRecording) {
+      magnetometer.startRecording(
+        initialDepth: magnetometer.currentDepth,
+        initialHeading: compass.heading,
+      );
     }
+    compass.startListening();
   }
 
   void _onResetTapDown() {

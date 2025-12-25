@@ -22,15 +22,6 @@ class ValidityGateConfig {
   /// Default: 5.0 μT² - lowered for weaker magnets
   final double minSignalStrength;
 
-  /// Maximum signal strength to prevent sensor saturation.
-  ///
-  /// Signal strength = λ1 (variance in μT²)
-  /// If variance is too high, magnetic field might be saturating sensor.
-  /// Note: λ1 is variance, so √λ1 gives standard deviation in μT.
-  /// Example: λ1=10000 μT² → σ=100 μT variation → likely saturated
-  /// Default: 10000.0 μT² (σ≈100 μT) - above this indicates potential saturation
-  final double maxSignalStrength;
-
   /// Maximum rotation frequency to prevent false positives.
   ///
   /// If phase changes faster than this, reject as noise.
@@ -60,7 +51,6 @@ class ValidityGateConfig {
     this.maxFlatness = 0.30,
     this.flatnessHysteresis = 0.05,
     this.minSignalStrength = 5.0,
-    this.maxSignalStrength = 10000.0,
     this.maxRotationFrequencyHz = 10.0,
     this.minPhaseChangePerSample = 0.000005,
     this.minCoherence = 0.40,
@@ -181,13 +171,12 @@ class ValidityGates {
             'flatness=${pca.flatness.toStringAsFixed(3)} (threshold=${flatnessThreshold.toStringAsFixed(3)}, lower=planar)');
     }
 
-    // Gate 2: Check signal strength (both min and max)
-    final hasStrongSignal = pca.signalStrength >= config.minSignalStrength &&
-                           pca.signalStrength <= config.maxSignalStrength;
+    // Gate 2: Check signal strength (min only; allow high variance to avoid blocking when magnet is close)
+    final hasStrongSignal = pca.signalStrength >= config.minSignalStrength;
     if (hasStrongSignal != _lastSignalState) {
       _lastSignalState = hasStrongSignal;
       print('[GATE-SIGNAL] Changed to ${hasStrongSignal ? "PASS" : "FAIL"} | '
-            'strength=${pca.signalStrength.toStringAsFixed(1)} (range=${config.minSignalStrength}-${config.maxSignalStrength})');
+            'strength=${pca.signalStrength.toStringAsFixed(1)} (min=${config.minSignalStrength})');
     }
 
     // Gate 3: Check frequency limit (use average to debounce)

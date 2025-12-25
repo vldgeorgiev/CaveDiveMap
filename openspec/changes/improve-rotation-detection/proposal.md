@@ -71,7 +71,7 @@ Implement a **PCA-based phase tracking** rotation detection system that:
 - **Phase-based counting**: Each 2π phase advance = one rotation
 - **PCA plane projection**: Finds dominant rotation plane automatically
 - **Baseline removal**: Adaptive per-axis baseline subtraction eliminates drift
-- **Validity gating**: Planarity, signal strength, frequency, and coherence checks
+- **Validity gating**: Planarity, signal strength, frequency, and coherence checks, plus inertial gating that rejects figure-8/large handset motion while tolerating steady forward translation (e.g., phone moving with the wheel on a rope)
 - **Fail-safe**: No false counts when signal quality is poor
 - **Minimal configuration**: Only wheel circumference required from user
 
@@ -89,10 +89,8 @@ Implement a **PCA-based phase tracking** rotation detection system that:
 - More robust detection algorithm
 - Reduced false positives/negatives
 - Better handling of device variations
-- Foundation for future ML-based improvements
 
 **Development**:
-- Opens door to other ML applications (depth estimation, passage width detection)
 - Cleaner separation of signal processing from UI
 - Better testability with synthetic data
 
@@ -126,7 +124,6 @@ Implement a **PCA-based phase tracking** rotation detection system that:
 
 ### In Scope
 
-- Design and implement ML-based rotation detection algorithm
 - Feature engineering from magnetometer X/Y/Z data
 - Model training pipeline with synthetic and real data
 - Real-time inference integration in `MagnetometerService`
@@ -136,7 +133,6 @@ Implement a **PCA-based phase tracking** rotation detection system that:
 
 ### Out of Scope
 
-- Cloud-based model training infrastructure
 - Automated data collection from production users (privacy concerns)
 - Integration with other sensors (gyroscope, accelerometer)
 - Complete removal of threshold-based algorithm

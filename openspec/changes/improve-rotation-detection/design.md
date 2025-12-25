@@ -449,11 +449,17 @@ class PCARotationDetector extends ChangeNotifier {
     // Uses recent phase history
     _rotationSpeedRps = _estimateRotationSpeed();
     
-    // Step 5: Validity gating
-    if (!_validityGates.isValidRotationSignal(pca, _rotationSpeedRps)) {
-      _signalQuality = 0.0;
-      return;
-    }
+  // Step 5: Validity gating
+  if (!_validityGates.isValidRotationSignal(pca, _rotationSpeedRps)) {
+    _signalQuality = 0.0;
+    return;
+  }
+
+  // Inertial gating (gyro/accelerometer):
+  // Reject large handset motion (figure-8 swings, jerks) but allow steady
+  // translation when the phone moves forward with the wheel (e.g., pulled by a rope).
+  // Combine gyro magnitude ceiling with short-term accel stability; thresholds are
+  // tuned to permit gentle hand motion and walking pace without blocking counts.
     
     // Step 6: Project latest sample to PCA plane
     final latestSample = _buffer.samples.last;
@@ -634,16 +640,16 @@ Magnetometer sampling already dominates (hardware cost). Additional processing:
 class MagnetometerService extends ChangeNotifier {
   final StorageService _storageService;
   
-  // New: PCA detector (replaces threshold logic)
-  late PCARotationDetector _detector;
+  // Default threshold detector
+  late ThresholdDetector _thresholdDetector;
   
-  // Legacy support
-  bool _useLegacyDetection = false;
-  late ThresholdDetector _legacyDetector;
+  // PCA beta detector
+  late PCARotationDetector _detector;
+  bool _usePca = false; // Threshold is default
   
   MagnetometerService(this._storageService) {
+    _thresholdDetector = ThresholdDetector(); // Default algorithm
     _detector = PCARotationDetector();
-    _legacyDetector = ThresholdDetector(); // Original algorithm
     _initializeDetector();
   }
   
@@ -654,12 +660,12 @@ class MagnetometerService extends ChangeNotifier {
   }
   
   void _onMagnetometerEvent(MagnetometerEvent event) {
-    if (_useLegacyDetection) {
-      // Use original magnitude-based algorithm
-      _legacyDetector.onMagnetometerEvent(event);
-    } else {
-      // Use new PCA phase tracking
+    if (_usePca) {
+      // Use PCA phase tracking (beta)
       _detector.onMagnetometerEvent(event);
+    } else {
+      // Use default magnitude-based algorithm
+      _thresholdDetector.onMagnetometerEvent(event);
     }
     
     // Update UI
@@ -671,13 +677,13 @@ class MagnetometerService extends ChangeNotifier {
   }
   
   // Getters delegate to active detector
-  int get totalRotations => _useLegacyDetection 
-      ? _legacyDetector.rotationCount 
-      : _detector.totalRotations;
+  int get totalRotations => _usePca 
+      ? _detector.totalRotations
+      : _thresholdDetector.rotationCount;
   
-  double get signalQuality => _useLegacyDetection 
-      ? 0.0 // Legacy mode doesn't have quality metric
-      : _detector.signalQuality;
+  double get signalQuality => _usePca
+      ? _detector.signalQuality
+      : 0.0; // Threshold mode doesn't have quality metric
 }
 ```
 
@@ -691,13 +697,13 @@ Column(
   children: [
     // Algorithm selection
     SwitchListTile(
-      title: Text('Use PCA Detection (Recommended)'),
+      title: Text('Use PCA Detection (Beta)'),
       subtitle: Text('Automatic, no configuration needed'),
-      value: !settings.useLegacyDetection,
-      onChanged: (value) => settings.setUseLegacyDetection(!value),
+      value: settings.usePcaDetection,
+      onChanged: (value) => settings.setUsePcaDetection(value),
     ),
     
-    if (!settings.useLegacyDetection) ...[
+    if (settings.usePcaDetection) ...[
       // Signal quality display
       Consumer<MagnetometerService>(
         builder: (context, mag, _) {
@@ -719,7 +725,7 @@ Column(
         Text('Planarity: ${mag.planarity.toStringAsFixed(3)}'),
       ],
     ] else ...[
-      // Show legacy threshold controls
+      // Show threshold controls (default mode)
       _buildThresholdSliders(),
     ],
   ],
@@ -965,9 +971,9 @@ The PCA-based phase tracking algorithm provides:
 ✅ **Orientation-independent** rotation detection  
 ✅ **Auto-calibration resistant** via baseline removal  
 ✅ **No manual configuration** required  
-✅ **Fail-safe** with validity gating  
+✅ **Fail-safe** with validity + inertial gating (rejects figure-8 handset motion but tolerates gentle forward translation while rotating)  
 ✅ **Low computational cost** (~5000 ops/sec)  
 ✅ **Deterministic** and mathematically rigorous  
-✅ **Backward compatible** with legacy threshold mode  
+✅ **Supports default threshold mode alongside PCA beta**  
 
 **Next Steps**: Proceed to implementation tasks in `tasks.md`
