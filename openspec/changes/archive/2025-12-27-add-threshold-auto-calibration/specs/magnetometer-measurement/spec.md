@@ -1,60 +1,10 @@
-# magnetometer-measurement Specification
+# Capability: Magnetometer Measurement
 
-## Purpose
-TBD - created by archiving change improve-rotation-detection. Update Purpose after archive.
-## Requirements
-### Requirement: Configurable Detection Thresholds (REQ-MAG-008)
+**Change**: `add-threshold-auto-calibration`  
+**Capability ID**: `magnetometer-measurement`  
+**Type**: Modified Capability
 
-Manual threshold configuration SHALL be available in threshold mode, AND auto-calibration SHALL be provided as the recommended method for determining threshold values.
-
-**Priority**: SHOULD *(previously SHOULD, now enhanced with auto-calibration)*
-
-**Rationale**: Manual configuration is preserved for advanced users and troubleshooting, while auto-calibration serves as the primary user-friendly method.
-
-**Verification**: Verify both manual entry and auto-calibration can set thresholds successfully.
-
-#### Scenario: Manual threshold entry still works
-
-**Given** user is in settings with threshold mode active  
-**When** user manually enters min threshold = 100 μT  
-**And** user manually enters max threshold = 180 μT  
-**When** user saves settings  
-**Then** thresholds SHALL be saved and applied  
-**And** manual values SHALL override any previous calibration
-
-#### Scenario: Auto-calibration is recommended
-
-**Given** user opens settings for the first time  
-**And** threshold mode is active  
-**Then** "Calibrate Thresholds" button SHALL be prominent  
-**And** tooltip or hint text SHALL recommend: "Use calibration for best results"  
-**And** manual threshold entry SHALL remain available below calibration button
-
-### Requirement: Detection Algorithm Selection (REQ-MAG-009)
-
-The app SHALL default to threshold-based detection with optional PCA phase tracking (beta) for users who opt in; both algorithms SHALL be accessible via settings.
-
-**Priority**: MUST
-
-**Rationale**: Threshold mode is simple and configurable; PCA offers orientation independence but is still in beta. Users can switch based on preference and device behavior.
-
-**Verification**: Verify threshold is default; verify toggle between threshold and PCA; verify both modes function correctly and selection persists.
-
-#### Scenario: Default algorithm is threshold
-
-**Given** the app is launched for the first time OR after update  
-**When** magnetometer service initializes  
-**Then** threshold detection SHALL be the active algorithm  
-**And** settings SHALL show threshold as selected  
-**And** PCA toggle SHALL be available
-
-#### Scenario: Manual algorithm toggle
-
-**Given** a user wants to use PCA phase tracking  
-**When** they toggle PCA in settings  
-**Then** the app SHALL switch to PCA-based algorithm  
-**And** threshold processing SHALL be paused  
-**And** selection SHALL persist across app restarts
+## ADDED Requirements
 
 ### Requirement: Threshold Auto-Calibration (REQ-MAG-010)
 
@@ -230,3 +180,31 @@ During calibration recording, the app SHALL display real-time magnetic field mag
 
 ---
 
+## MODIFIED Requirements
+
+### Requirement: Configurable Detection Thresholds (REQ-MAG-008)
+
+Manual threshold configuration SHALL be available in threshold mode, AND auto-calibration SHALL be provided as the recommended method for determining threshold values.
+
+**Priority**: SHOULD *(previously SHOULD, now enhanced with auto-calibration)*
+
+**Rationale**: Manual configuration is preserved for advanced users and troubleshooting, while auto-calibration serves as the primary user-friendly method.
+
+**Verification**: Verify both manual entry and auto-calibration can set thresholds successfully.
+
+#### Scenario: Manual threshold entry still works
+
+**Given** user is in settings with threshold mode active  
+**When** user manually enters min threshold = 100 μT  
+**And** user manually enters max threshold = 180 μT  
+**When** user saves settings  
+**Then** thresholds SHALL be saved and applied  
+**And** manual values SHALL override any previous calibration
+
+#### Scenario: Auto-calibration is recommended
+
+**Given** user opens settings for the first time  
+**And** threshold mode is active  
+**Then** "Calibrate Thresholds" button SHALL be prominent  
+**And** tooltip or hint text SHALL recommend: "Use calibration for best results"  
+**And** manual threshold entry SHALL remain available below calibration button

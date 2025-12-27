@@ -8,6 +8,7 @@ import 'services/magnetometer_service.dart';
 import 'services/compass_service.dart';
 import 'services/export_service.dart';
 import 'services/button_customization_service.dart';
+import 'services/threshold_calibration_service.dart';
 import 'screens/main_screen.dart';
 import 'utils/theme_extensions.dart';
 
@@ -93,6 +94,17 @@ class CaveDiveMapApp extends StatelessWidget {
 
         // Compass service
         ChangeNotifierProvider(create: (_) => CompassService()),
+
+        // Threshold calibration service with magnetometer dependency
+        ChangeNotifierProxyProvider<MagnetometerService, ThresholdCalibrationService>(
+          create: (_) => ThresholdCalibrationService(),
+          update: (context, magnetometer, previous) {
+            final service = previous ?? ThresholdCalibrationService();
+            // Update current magnitude from uncalibrated magnetometer
+            service.updateMagnitude(magnetometer.uncalibratedMagnitude);
+            return service;
+          },
+        ),
 
         // Export service
         Provider(create: (_) => ExportService()),

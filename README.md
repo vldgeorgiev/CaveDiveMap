@@ -23,6 +23,7 @@ The application is still in beta. The concept has been tested multiple times wit
 - Automatic survey point generation
 - Automatic calibration of compass
 - Real-time heading accuracy indicator
+- **Auto-calibration for threshold detection** - guided two-step process to find optimal min/max thresholds
 
 ### Manual Survey Stations
 
@@ -96,6 +97,26 @@ See `archive/README.md` for building the original Swift version (reference only)
 
 The app requires a 3D-printed device attached to a smartphone in a waterproof dive case. The device contains the measuring wheel and guideline clamp mechanism.  The magnet should be positioned to pass as close as possible to the phone sensor.
 
+### Threshold Auto-Calibration
+
+The app includes a guided calibration feature to automatically determine optimal magnetic field thresholds for rotation detection:
+
+**How to calibrate**:
+1. Go to **Settings** → **Rotation Algorithm** → Select **"Threshold"**
+2. Tap **"Calibrate Thresholds"** button
+3. Follow the on-screen instructions:
+   - **Step 1**: Position the magnet wheel as **far** as possible from your phone, then move the phone in a figure-8 motion for 10 seconds
+   - **Step 2**: Position the magnet wheel as **close** as possible to your phone, then move the phone in a figure-8 motion for 10 seconds
+4. Review the calculated thresholds and tap **"Apply"**
+
+**Why calibrate?**
+- Different phones have varying magnetometer sensitivity
+- Magnet strength and positioning affect detection thresholds
+- Auto-calibration eliminates trial-and-error threshold tuning
+- The algorithm applies percentage-based safety margins (15-25% of range) to account for sensor delay
+
+**Tip**: Re-run calibration if you change the magnet, modify the 3D printed device, or switch to a different phone.
+
 **Design Goals**:
 
 Fully 3D printable so you can make it anywhere with a 3D printer available. No screws, nuts, springs, or other hardware required.
@@ -124,7 +145,9 @@ Before printing the 3D parts you have to iddentify the location. To do this, ins
 
 The orientation of the phone can influence the magnitude when the magnet and the Earth's field are combined. In some cases the magnitude values can change considerably, which makes finding proper min/max threshold values problematic. In practice it means that the device may detect the rotations in one orientation, but not in another.
 
-Some phones automatically try to compensate for local magnetic fields, such as the magnetic wheel in our case. This compensation is useful for the azimuth reading, but can affect the magnitude readings and min/max thresholds. The only way to verify this is to test in various orientations, rotating the phone, giving it time to calibrate, compare the measured distances to a known one
+**Solution**: Use the built-in auto-calibration feature (Settings → Calibrate Thresholds) to determine optimal thresholds for your specific device and setup. This accounts for phone-specific magnetometer characteristics and magnet positioning.
+
+Some phones automatically try to compensate for local magnetic fields, such as the magnetic wheel in our case. This compensation is useful for the azimuth reading, but can affect the magnitude readings and min/max thresholds. To overcome this, the application tries to use the uncompensated magnetometer values, if they are available.
 
 ### Location of the wheel
 

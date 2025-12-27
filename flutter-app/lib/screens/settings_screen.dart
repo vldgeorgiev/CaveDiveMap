@@ -16,6 +16,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'button_customization_screen.dart';
 import 'survey_data_debug_screen.dart';
+import 'threshold_calibration_screen.dart';
 
 /// Settings screen for app configuration
 class SettingsScreen extends StatefulWidget {
@@ -284,6 +285,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  void _navigateToCalibration() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const ThresholdCalibrationScreen(),
+      ),
+    ).then((_) {
+      // Refresh settings when returning from calibration
+      setState(() {
+        final settings = context.read<Settings>();
+        _minPeakThresholdController.text = settings.minPeakThreshold.toInt().toString();
+        _maxPeakThresholdController.text = settings.maxPeakThreshold.toInt().toString();
+      });
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -438,6 +455,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         const SizedBox(height: 2),
                         Text(
                           'Magnetic field range for peak detection',
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.textSecondary,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          onPressed: () => _navigateToCalibration(),
+                          icon: const Icon(Icons.tune),
+                          label: const Text('Calibrate Thresholds'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.actionSave,
+                            foregroundColor: AppColors.textPrimary,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            minimumSize: const Size(double.infinity, 48),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Auto-detect optimal thresholds for your setup',
                           style: AppTextStyles.caption.copyWith(
                             color: AppColors.textSecondary,
                             fontStyle: FontStyle.italic,
