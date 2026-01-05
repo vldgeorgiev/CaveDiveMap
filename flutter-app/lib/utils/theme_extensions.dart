@@ -147,8 +147,8 @@ class AppButtonSizes {
       0.26; // 26% of button size for text labels
 
   // Default button sizes
-  static const double mainScreenDefault = 75.0;
-  static const double saveDataScreenDefault = 70.0;
+  static const double mainScreenDefault = 90.0;
+  static const double saveDataScreenDefault = 90.0;
 
   // Button size constraints
   static const double minSize = 40.0;

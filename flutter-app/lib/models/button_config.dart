@@ -51,29 +51,29 @@ class ButtonConfig {
 
   // ========== Default Configurations ==========
 
-  // Main Screen Defaults (matching Swift app)
+  // Main Screen Defaults
   static ButtonConfig defaultMainSave() =>
-      const ButtonConfig(size: 75, offsetX: 0, offsetY: 200);
+      const ButtonConfig(size: 90, offsetX: 0, offsetY: 200);
 
   static ButtonConfig defaultMainMap() =>
-      const ButtonConfig(size: 75, offsetX: 130, offsetY: 200);
+      const ButtonConfig(size: 90, offsetX: 130, offsetY: 200);
 
   static ButtonConfig defaultMainReset() =>
-      const ButtonConfig(size: 75, offsetX: -70, offsetY: 110);
+      const ButtonConfig(size: 90, offsetX: -70, offsetY: 110);
 
   static ButtonConfig defaultMainCamera() =>
-      const ButtonConfig(size: 75, offsetX: 70, offsetY: 110);
+      const ButtonConfig(size: 90, offsetX: 70, offsetY: 110);
 
-  // Save Data View Defaults (matching Swift app)
+  // Save Data View Defaults
   static ButtonConfig defaultSaveDataSave() =>
-      const ButtonConfig(size: 75, offsetX: 0, offsetY: 200);
+      const ButtonConfig(size: 90, offsetX: 0, offsetY: 200);
 
   static ButtonConfig defaultSaveDataIncrement() =>
-      const ButtonConfig(size: 75, offsetX: 70, offsetY: 110);
+      const ButtonConfig(size: 90, offsetX: 70, offsetY: 110);
 
   static ButtonConfig defaultSaveDataDecrement() =>
-      const ButtonConfig(size: 75, offsetX: -70, offsetY: 110);
+      const ButtonConfig(size: 90, offsetX: -70, offsetY: 110);
 
   static ButtonConfig defaultSaveDataCycle() =>
-      const ButtonConfig(size: 75, offsetX: 130, offsetY: 200);
+      const ButtonConfig(size: 90, offsetX: 130, offsetY: 200);
 }
