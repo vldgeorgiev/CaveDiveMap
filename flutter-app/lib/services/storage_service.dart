@@ -150,6 +150,13 @@ class StorageService extends ChangeNotifier {
     _pointCounter = 1;
     await _prefs?.setInt('pointCounter', _pointCounter);
 
+    // Clear last entered depth and LRUD values
+    await _prefs?.remove('lastDepth');
+    await _prefs?.remove('lastLeft');
+    await _prefs?.remove('lastRight');
+    await _prefs?.remove('lastUp');
+    await _prefs?.remove('lastDown');
+
     notifyListeners();
   }
 
@@ -284,5 +291,44 @@ class StorageService extends ChangeNotifier {
       offsetX: offsetX,
       offsetY: offsetY,
     );
+  }
+
+  // ========== Last Entered Values (Depth & LRUD) ==========
+
+  /// Save last entered depth and LRUD values
+  Future<void> saveLastEnteredValues({
+    required double depth,
+    required double left,
+    required double right,
+    required double up,
+    required double down,
+  }) async {
+    if (_prefs == null) return;
+    await _prefs!.setDouble('lastDepth', depth);
+    await _prefs!.setDouble('lastLeft', left);
+    await _prefs!.setDouble('lastRight', right);
+    await _prefs!.setDouble('lastUp', up);
+    await _prefs!.setDouble('lastDown', down);
+  }
+
+  /// Load last entered depth and LRUD values
+  Map<String, double> getLastEnteredValues() {
+    if (_prefs == null) {
+      return {
+        'depth': 0.0,
+        'left': 0.0,
+        'right': 0.0,
+        'up': 0.0,
+        'down': 0.0,
+      };
+    }
+
+    return {
+      'depth': _prefs!.getDouble('lastDepth') ?? 0.0,
+      'left': _prefs!.getDouble('lastLeft') ?? 0.0,
+      'right': _prefs!.getDouble('lastRight') ?? 0.0,
+      'up': _prefs!.getDouble('lastUp') ?? 0.0,
+      'down': _prefs!.getDouble('lastDown') ?? 0.0,
+    };
   }
 }

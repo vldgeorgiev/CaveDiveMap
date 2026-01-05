@@ -156,6 +156,9 @@ struct SavedData: Codable {
 
 - **Main Screen**: Live magnetometer data, distance, heading, depth controls
 - **Save Data Screen**: Manual point entry with cyclic parameter editing (depth → left → right → up → down)
+  - Values persist across data point saves (remembers last entered depth and LRUD)
+  - Values are stored in SharedPreferences and reset only when survey data is cleared
+  - Improves upon original Swift implementation which only restored depth from last saved manual point
 - **Settings Screen**: Configuration and button customization
   - Keep Screen On: Prevents screen dimming during surveys (default: enabled)
   - Fullscreen Mode: Hides system UI bars for immersive experience (default: enabled)
@@ -276,6 +279,10 @@ Essential for underwater usability with thick waterproof cases:
 - Manages survey data persistence in SQLite database
 - Type-safe SQL queries via Drift code generation
 - SharedPreferences for app settings and button configs
+- Stores last entered depth and LRUD values for Save Data Screen
+  - `saveLastEnteredValues()`: Persists depth, left, right, up, down to SharedPreferences
+  - `getLastEnteredValues()`: Retrieves last entered values (defaults to 0.0)
+  - Values cleared on `clearAllSurveyData()` when resetting survey
 - Reactive updates via ChangeNotifier
 - Migration support for schema changes
 

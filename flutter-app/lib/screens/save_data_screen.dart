@@ -26,11 +26,29 @@ class _SaveDataScreenState extends State<SaveDataScreen> {
   final List<String> _parameters = ['Depth', 'Left', 'Right', 'Up', 'Down'];
 
   // Values for manual point
-  double _depth = 0.0;
-  double _left = 0.0;
-  double _right = 0.0;
-  double _up = 0.0;
-  double _down = 0.0;
+  late double _depth;
+  late double _left;
+  late double _right;
+  late double _up;
+  late double _down;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLastEnteredValues();
+  }
+
+  /// Load last entered values from storage
+  void _loadLastEnteredValues() {
+    final storageService = context.read<StorageService>();
+    final lastValues = storageService.getLastEnteredValues();
+
+    _depth = lastValues['depth']!;
+    _left = lastValues['left']!;
+    _right = lastValues['right']!;
+    _up = lastValues['up']!;
+    _down = lastValues['down']!;
+  }
 
   // Tap vs long-press detection
   Timer? _incrementTimer;
@@ -208,6 +226,15 @@ class _SaveDataScreenState extends State<SaveDataScreen> {
   Future<void> _saveManualPoint() async {
     final magnetometerService = context.read<MagnetometerService>();
     final storageService = context.read<StorageService>();
+
+    // Save the entered values for next time
+    await storageService.saveLastEnteredValues(
+      depth: _depth,
+      left: _left,
+      right: _right,
+      up: _up,
+      down: _down,
+    );
 
     final manualPoint = SurveyData(
       recordNumber: magnetometerService.currentPointNumber + 1,
