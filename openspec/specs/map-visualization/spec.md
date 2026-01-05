@@ -83,25 +83,6 @@ The system SHALL display up and down passage dimensions as vertical lines at eac
 - **AND** line extends down distance below centerline
 - **AND** passage height visualization scales with zoom level
 
-### Requirement: Auto-Fit Initial Zoom
-
-The system SHALL automatically calculate and apply zoom level to fit all manual survey points on screen when map view first loads (100% view).
-
-#### Scenario: Map screen loads with survey data
-
-- **WHEN** map screen is opened
-- **THEN** bounding box of all manual points is calculated
-- **AND** zoom scale is set to fit entire survey in viewport
-- **AND** 10% margin is added around survey bounds
-- **AND** map is centered on survey centroid
-
-#### Scenario: User manually zooms then reopens screen
-
-- **WHEN** user has manually zoomed map
-- **AND** user navigates away and returns to map screen
-- **THEN** auto-fit is reapplied on screen load
-- **AND** previous zoom/pan state is reset
-
 ### Requirement: Point Number Labels
 
 The system SHALL display record numbers at each manual survey point in both Plan and Elevation views.
@@ -122,20 +103,102 @@ The system SHALL display record numbers at each manual survey point in both Plan
 
 ### Requirement: Pan and Zoom Gestures
 
-The system SHALL support pan and zoom gestures in both Plan and Elevation views with smooth responsive feedback.
+The system SHALL support pan and zoom gestures with independent state for Plan and Elevation views, providing smooth responsive feedback.
 
 #### Scenario: User pans map
 
 - **WHEN** user drags finger across map
-- **THEN** view offset updates in real-time
+- **THEN** view offset updates in real-time for current view mode
 - **AND** pan works in both view modes
-- **AND** pan state is maintained when switching between view modes
+- **AND** pan state is independent between Plan and Elevation views
 
 #### Scenario: User zooms map
 
 - **WHEN** user pinches to zoom
-- **THEN** scale updates smoothly
+- **THEN** scale updates smoothly for current view mode
 - **AND** zoom center is at gesture focal point
-- **AND** zoom range is clamped to prevent excessive zoom in/out
-- **AND** zoom state is maintained when switching between view modes
+- **AND** zoom range is clamped between 1.0 and 100.0 pixels per meter (minimum ~1m to maximum ~50m visible area)
+- **AND** zoom state is independent between Plan and Elevation views
+
+#### Scenario: User switches between view modes
+
+- **WHEN** user switches from Plan to Elevation view or vice versa
+- **THEN** each view maintains its own zoom level
+- **AND** each view maintains its own pan offset
+- **AND** auto-fit is applied once on first load for each view mode
+
+#### Scenario: User rotates map in Plan view
+
+- **WHEN** user performs two-finger twist gesture in Plan view
+- **THEN** map rotates around center point
+- **AND** rotation is only available in Plan view (not Elevation)
+- **AND** rotation state is maintained when switching away and back to Plan view
+
+### Requirement: Visual Grid Display
+
+The system SHALL display a reference grid with adaptive spacing that remains visible at all zoom levels.
+
+#### Scenario: Grid displays at medium zoom
+
+- **WHEN** zoom scale is 10 pixels/meter or higher (zoomed in)
+- **THEN** grid spacing is 1 meter
+- **AND** grid lines are visible across entire viewport
+
+#### Scenario: Grid displays at low zoom
+
+- **WHEN** zoom scale is less than 10 pixels/meter (zoomed out)
+- **THEN** grid spacing is 10 meters
+- **AND** grid lines are visible across entire viewport
+
+#### Scenario: User pans to different area
+
+- **WHEN** user pans map to show different survey area
+- **THEN** grid extends to cover visible area
+- **AND** grid remains aligned to world coordinates
+- **AND** grid does not disappear at viewport edges
+
+### Requirement: North Arrow Indicator
+
+The system SHALL display a north arrow indicator in Plan view that rotates to match map orientation.
+
+#### Scenario: North arrow displays in Plan view
+
+- **WHEN** Plan view is active
+- **THEN** north arrow is visible in top-right corner
+- **AND** arrow points to true north
+- **AND** arrow rotates with map when user rotates view
+
+#### Scenario: North arrow hidden in Elevation view
+
+- **WHEN** Elevation view is active
+- **THEN** north arrow is not displayed
+- **AND** indicator space is available for other UI elements
+
+### Requirement: Auto-Fit Initial Zoom
+
+The system SHALL automatically calculate and apply zoom level to fit all manual survey points on screen when each view mode is first loaded.
+
+#### Scenario: Map screen loads Plan view with survey data
+
+- **WHEN** map screen is opened and Plan view loads for first time
+- **THEN** bounding box of all manual points is calculated for Plan projection
+- **AND** zoom scale is set to fit entire survey in viewport
+- **AND** 20% margin is added around survey bounds (10% each side)
+- **AND** map is centered on survey centroid
+- **AND** rotation is reset to zero (north-up)
+
+#### Scenario: User switches to Elevation view for first time
+
+- **WHEN** user switches to Elevation view for first time in session
+- **THEN** bounding box of all manual points is calculated for Elevation projection
+- **AND** zoom scale is set to fit entire survey in viewport
+- **AND** 20% margin is added around survey bounds
+- **AND** map is centered on survey centroid
+
+#### Scenario: User manually adjusts then switches views
+
+- **WHEN** user has manually zoomed/panned in one view mode
+- **AND** user switches to other view mode and back
+- **THEN** previous zoom/pan state is preserved for each view
+- **AND** auto-fit is not reapplied after initial load
 

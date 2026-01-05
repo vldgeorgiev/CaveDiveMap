@@ -849,20 +849,29 @@ class CaveMapPainter extends CustomPainter {
   }
 
   void _drawGrid(Canvas canvas, Size size) {
+    // Grid spacing: use 1m when zoomed in, 10m when zoomed out
+    // Switch at scale = 10 (when 10m would be 100 pixels)
+    final gridSpacing = scale >= 10.0 ? 1.0 : 10.0;
+
     final gridPaint = Paint()
       ..color = Colors.grey.withOpacity(0.2)
-      ..strokeWidth = 1 / scale;
-
-    const gridSpacing = 5.0; // meters
+      ..strokeWidth = 1.5 / scale; // 1.5 screen pixels constant width
 
     // Calculate visible range in world coordinates
-    final extent = math.max(size.width, size.height) / scale * 1.5;
+    // The canvas has been: translated to center, scaled, rotated, then offset translated
+    // So we need to work backwards from screen bounds to world bounds
+    final halfWidth = size.width / 2 / scale;
+    final halfHeight = size.height / 2 / scale;
+    final margin = math.max(halfWidth, halfHeight) * 0.5; // Extra margin
 
-    // Calculate grid start positions aligned to gridSpacing in world space
-    final startX = (-extent / gridSpacing).floor() * gridSpacing;
-    final endX = (extent / gridSpacing).ceil() * gridSpacing;
-    final startY = (-extent / gridSpacing).floor() * gridSpacing;
-    final endY = (extent / gridSpacing).ceil() * gridSpacing;
+    // The offset moves the world, so visible center in world coords is -offset
+    final centerX = -offset.dx;
+    final centerY = -offset.dy;
+
+    final startX = ((centerX - halfWidth - margin) / gridSpacing).floor() * gridSpacing;
+    final endX = ((centerX + halfWidth + margin) / gridSpacing).ceil() * gridSpacing;
+    final startY = ((centerY - halfHeight - margin) / gridSpacing).floor() * gridSpacing;
+    final endY = ((centerY + halfHeight + margin) / gridSpacing).ceil() * gridSpacing;
 
     // Vertical lines - draw in world space
     for (double x = startX; x <= endX; x += gridSpacing) {
