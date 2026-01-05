@@ -377,7 +377,7 @@ class _ThresholdCalibrationScreenState extends State<ThresholdCalibrationScreen>
                   'Min Threshold: ${calibService.calculatedMinThreshold.toStringAsFixed(1)} μT',
                   'Max Threshold: ${calibService.calculatedMaxThreshold.toStringAsFixed(1)} μT',
                   '',
-                  'Margin: ${(ThresholdCalibrationService.marginPercentage * 100).toStringAsFixed(0)}% of range',
+                  'Low Margin: ${(ThresholdCalibrationService.lowMarginPercentage * 100).toStringAsFixed(0)}%, High Margin: ${(ThresholdCalibrationService.highMarginPercentage * 100).toStringAsFixed(0)}%',
                   'Separation: ${(calibService.calculatedMaxThreshold - calibService.calculatedMinThreshold).toStringAsFixed(1)} μT ✓',
                 ],
               ),

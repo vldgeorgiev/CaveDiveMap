@@ -51,8 +51,12 @@ class ThresholdCalibrationService extends ChangeNotifier {
   Timer? _countdownTimer;
   final List<double> _calibrationSamples = [];
 
-  /// Margin percentage to apply to calculated thresholds (25% of range)
-  static const double marginPercentage = 0.25;
+  /// Low-end margin percentage (applied to min threshold, 20% of range)
+  static const double lowMarginPercentage = 0.20;
+
+  /// High-end margin percentage (applied to max threshold, 50% of range)
+  /// Higher margin accounts for quick rotations where peak is reached briefly
+  static const double highMarginPercentage = 0.50;
 
   /// Minimum required separation between far and close measurements
   static const double minSeparation = 20.0;
@@ -188,13 +192,16 @@ class ThresholdCalibrationService extends ChangeNotifier {
 
     // recordedMinField is from FAR position (baseline, LOWER value ~70 μT)
     // recordedMaxField is from CLOSE position (peak signal, HIGHER value ~800 μT)
-    // Calculate margin as percentage of range
+    // Calculate separate margins for low and high ends
     final range = _recordedMaxField - _recordedMinField;
-    final margin = range * marginPercentage;
+    final lowMargin = range * lowMarginPercentage;
+    final highMargin = range * highMarginPercentage;
 
-    // Apply percentage-based margins
-    _calculatedMinThreshold = _recordedMinField + margin;
-    _calculatedMaxThreshold = _recordedMaxField - margin;
+    // Apply asymmetric percentage-based margins
+    // Low margin (20%) for min threshold
+    // High margin (40%) for max threshold to catch brief peaks
+    _calculatedMinThreshold = _recordedMinField + lowMargin;
+    _calculatedMaxThreshold = _recordedMaxField - highMargin;
 
     // Validate separation
     final separation = _calculatedMaxThreshold - _calculatedMinThreshold;
@@ -225,7 +232,7 @@ class ThresholdCalibrationService extends ChangeNotifier {
 
     _state = CalibrationState.complete;
     notifyListeners();
-    print('[CALIBRATION] Calculation complete. Range: ${range.toStringAsFixed(1)} μT, Margin: ${margin.toStringAsFixed(1)} μT (${(marginPercentage * 100).toStringAsFixed(0)}%), Thresholds: ${_calculatedMinThreshold.toStringAsFixed(1)} - ${_calculatedMaxThreshold.toStringAsFixed(1)} μT');
+    print('[CALIBRATION] Calculation complete. Range: ${range.toStringAsFixed(1)} μT, Low Margin: ${lowMargin.toStringAsFixed(1)} μT (${(lowMarginPercentage * 100).toStringAsFixed(0)}%), High Margin: ${highMargin.toStringAsFixed(1)} μT (${(highMarginPercentage * 100).toStringAsFixed(0)}%), Thresholds: ${_calculatedMinThreshold.toStringAsFixed(1)} - ${_calculatedMaxThreshold.toStringAsFixed(1)} μT');
   }
 
   /// Cancel calibration and reset to idle

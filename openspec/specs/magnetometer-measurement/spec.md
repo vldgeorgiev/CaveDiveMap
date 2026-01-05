@@ -58,11 +58,11 @@ The app SHALL default to threshold-based detection with optional PCA phase track
 
 ### Requirement: Threshold Auto-Calibration (REQ-MAG-010)
 
-The application SHALL provide a guided auto-calibration process for threshold algorithm that automatically determines optimal min/max magnetic field thresholds through a two-step user-guided measurement procedure.
+The application SHALL provide a guided auto-calibration process for threshold algorithm that automatically determines optimal min/max magnetic field thresholds through a two-step user-guided measurement procedure. The algorithm SHALL apply asymmetric percentage-based margins (20% low-end, 50% high-end) to account for brief peak detection during quick rotations.
 
 **Priority**: SHOULD
 
-**Rationale**: Manual threshold configuration requires technical knowledge and trial-and-error. Auto-calibration eliminates guesswork, improves accuracy, and enhances user experience by adapting to specific device and magnet characteristics.
+**Rationale**: Manual threshold configuration requires technical knowledge and trial-and-error. Auto-calibration eliminates guesswork, improves accuracy, and enhances user experience by adapting to specific device and magnet characteristics. Asymmetric margins ensure the high peak threshold is set conservatively to catch brief peaks during quick rotations, while the low threshold has a tighter margin for baseline detection.
 
 **Verification**: Complete calibration flow and verify calculated thresholds result in >95% rotation detection accuracy.
 
@@ -118,20 +118,29 @@ The application SHALL provide a guided auto-calibration process for threshold al
 **Given** far position recorded `maxField` = 200 μT  
 **And** close position recorded `minField` = 120 μT  
 **When** app calculates thresholds  
-**Then** `calculatedMin = minField + 10 μT = 130 μT`  
-**And** `calculatedMax = maxField - 10 μT = 190 μT`  
-**And** separation check SHALL pass (`190 - 130 = 60 μT > 40 μT`)  
+**Then** range = 200 - 120 = 80 μT  
+**And** low margin = 80 × 0.20 = 16 μT  
+**And** high margin = 80 × 0.50 = 40 μT  
+**And** `calculatedMin = minField + lowMargin = 120 + 16 = 136 μT`  
+**And** `calculatedMax = maxField - highMargin = 200 - 40 = 160 μT`  
+**And** separation check SHALL pass (`160 - 136 = 24 μT > 20 μT`)  
 **And** result screen SHALL display calculated thresholds  
+**And** result screen SHALL display "Low Margin: 20%, High Margin: 50%"  
 **And** "Apply" button SHALL be enabled
+
+**Note**: Asymmetric margins (20% low, 50% high) account for brief peak detection during quick rotations.
 
 #### Scenario: Threshold calculation with insufficient separation
 
 **Given** far position recorded `maxField` = 150 μT  
 **And** close position recorded `minField` = 140 μT  
 **When** app calculates thresholds  
-**Then** `calculatedMin = 150 μT`  
-**And** `calculatedMax = 140 μT`  
-**And** separation check SHALL fail (`140 - 150 = -10 μT < 40 μT`)  
+**Then** range = 150 - 140 = 10 μT  
+**And** low margin = 10 × 0.20 = 2 μT  
+**And** high margin = 10 × 0.50 = 5 μT  
+**And** `calculatedMin = 140 + 2 = 142 μT`  
+**And** `calculatedMax = 150 - 5 = 145 μT`  
+**And** separation check SHALL fail (`145 - 142 = 3 μT < 20 μT`)  
 **And** error message SHALL be displayed: "Insufficient separation between far and close positions"  
 **And** "Retry" button SHALL be offered  
 **And** "Apply" button SHALL remain disabled
@@ -139,10 +148,10 @@ The application SHALL provide a guided auto-calibration process for threshold al
 #### Scenario: Apply calibration results
 
 **Given** calibration completed successfully  
-**And** calculated thresholds are `minThreshold = 130 μT`, `maxThreshold = 190 μT`  
+**And** calculated thresholds are `minThreshold = 136 μT`, `maxThreshold = 160 μT`  
 **When** user presses "Apply"  
-**Then** app SHALL call `settings.updateMinPeakThreshold(130.0)`  
-**And** app SHALL call `settings.updateMaxPeakThreshold(190.0)`  
+**Then** app SHALL call `settings.updateMinPeakThreshold(136.0)`  
+**And** app SHALL call `settings.updateMaxPeakThreshold(160.0)`  
 **And** settings SHALL be persisted via `StorageService`  
 **And** app SHALL navigate back to settings screen  
 **And** success message SHALL be displayed: "Thresholds calibrated successfully"
@@ -180,21 +189,21 @@ Calibrated threshold values SHALL persist across app restarts and SHALL continue
 
 #### Scenario: Threshold persistence after restart
 
-**Given** user completed calibration with thresholds 130/190 μT  
+**Given** user completed calibration with thresholds 136/160 μT  
 **And** app is closed completely  
 **When** app is restarted  
-**Then** settings SHALL load persisted thresholds (130/190 μT)  
+**Then** settings SHALL load persisted thresholds (136/160 μT)  
 **And** magnetometer service SHALL use persisted thresholds  
 **And** calibration status indicator SHALL show "Calibrated" (if implemented)
 
 #### Scenario: Re-calibration overwrites previous values
 
-**Given** user has previously calibrated thresholds to 130/190 μT  
+**Given** user has previously calibrated thresholds to 136/160 μT  
 **When** user performs calibration again  
-**And** new calibration results in 140/200 μT  
+**And** new calibration results in 145/170 μT  
 **When** user applies new calibration  
-**Then** settings SHALL update to new thresholds 140/200 μT  
-**And** old thresholds (130/190 μT) SHALL be replaced  
+**Then** settings SHALL update to new thresholds 145/170 μT  
+**And** old thresholds (136/160 μT) SHALL be replaced  
 **And** new thresholds SHALL persist across restarts
 
 ---
@@ -217,16 +226,7 @@ During calibration recording, the app SHALL display real-time magnetic field mag
 **And** magnitude SHALL be displayed in large, readable text  
 **And** units (μT) SHALL be displayed alongside value
 
-#### Scenario: Visual feedback for magnitude range
-
-**Given** calibration step is recording  
-**When** magnitude is below 50 μT  
-**Then** magnitude display color SHALL be green (baseline)  
-**When** magnitude is between 50-150 μT  
-**Then** magnitude display color SHALL be yellow (elevated)  
-**When** magnitude exceeds 150 μT  
-**Then** magnitude display color SHALL be red (peak)  
-**Note**: Color thresholds are for visual feedback only, not calibration logic
+**Note**: Color-coded visual feedback was removed in favor of neutral display colors for consistency.
 
 ---
 
