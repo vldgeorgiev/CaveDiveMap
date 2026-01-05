@@ -22,16 +22,51 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
-  double _scale = 20.0; // pixels per meter
-  Offset _offset = Offset.zero; // Pan offset in WORLD units (meters)
+  // Separate state for plan view
+  double _planScale = 20.0;
+  Offset _planOffset = Offset.zero;
+  double _planRotation = 0.0;
+
+  // Separate state for elevation view
+  double _elevationScale = 20.0;
+  Offset _elevationOffset = Offset.zero;
+
+  // Gesture tracking
   Offset _lastFocalPoint = Offset.zero;
-  double _rotation = 0.0; // Rotation in radians
-  double _baseRotation = 0.0; // Base rotation before gesture
-  double _baseScale = 20.0; // Base scale before gesture
+  double _baseRotation = 0.0;
+  double _baseScale = 20.0;
+
   MapViewMode _viewMode = MapViewMode.plan;
-  bool _isFirstLoad = true; // Track if auto-fit has been applied
+  bool _isFirstLoadPlan = true;
+  bool _isFirstLoadElevation = true;
 
   late Future<List<SurveyData>> _surveyFuture;
+
+  // Getters for current view's state
+  double get _scale => _viewMode == MapViewMode.plan ? _planScale : _elevationScale;
+  set _scale(double value) {
+    if (_viewMode == MapViewMode.plan) {
+      _planScale = value;
+    } else {
+      _elevationScale = value;
+    }
+  }
+
+  Offset get _offset => _viewMode == MapViewMode.plan ? _planOffset : _elevationOffset;
+  set _offset(Offset value) {
+    if (_viewMode == MapViewMode.plan) {
+      _planOffset = value;
+    } else {
+      _elevationOffset = value;
+    }
+  }
+
+  double get _rotation => _viewMode == MapViewMode.plan ? _planRotation : 0.0;
+  set _rotation(double value) {
+    if (_viewMode == MapViewMode.plan) {
+      _planRotation = value;
+    }
+  }
 
   @override
   void initState() {
@@ -93,12 +128,20 @@ class _MapScreenState extends State<MapScreen> {
             );
           }
 
-          // Auto-fit on first load
-          if (_isFirstLoad) {
+          // Auto-fit on first load for each view mode
+          final needsAutoFit = _viewMode == MapViewMode.plan
+              ? _isFirstLoadPlan
+              : _isFirstLoadElevation;
+
+          if (needsAutoFit) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               _performAutoFit(manualPoints);
+              if (_viewMode == MapViewMode.plan) {
+                _isFirstLoadPlan = false;
+              } else {
+                _isFirstLoadElevation = false;
+              }
             });
-            _isFirstLoad = false;
           }
 
           return Stack(
@@ -115,7 +158,7 @@ class _MapScreenState extends State<MapScreen> {
                   onScaleUpdate: (details) {
                     setState(() {
                       // Zoom - update scale first
-                      _scale = (_baseScale * details.scale).clamp(5.0, 100.0);
+                      _scale = (_baseScale * details.scale).clamp(1.0, 100.0);
 
                       // Pan - convert screen delta (pixels) to world delta (meters)
                       // Need to account for rotation when panning
@@ -161,6 +204,14 @@ class _MapScreenState extends State<MapScreen> {
 
               // Scale indicator
               Positioned(bottom: 16, left: 16, child: _buildScaleIndicator()),
+
+              // North arrow indicator (plan view only)
+              if (_viewMode == MapViewMode.plan)
+                Positioned(
+                  top: 16,
+                  right: 16,
+                  child: _buildNorthArrow(),
+                ),
 
               // Stats overlay
               Positioned(
@@ -265,25 +316,36 @@ class _MapScreenState extends State<MapScreen> {
     if (bounds.width == 0 || bounds.height == 0) {
       // Single point or zero-size bounds
       setState(() {
-        _scale = 20.0;
-        _offset = Offset.zero;
-        _rotation = 0.0;
+        if (_viewMode == MapViewMode.plan) {
+          _planScale = 20.0;
+          _planOffset = Offset.zero;
+          _planRotation = 0.0;
+        } else {
+          _elevationScale = 20.0;
+          _elevationOffset = Offset.zero;
+        }
       });
       return;
     }
 
     setState(() {
-      final padding = 0.1; // 10% margin
-      final scaleX = size.width / (bounds.width * (1 + padding));
-      final scaleY = size.height / (bounds.height * (1 + padding));
-      _rotation = 0.0;
-      _scale = math.min(scaleX, scaleY).clamp(5.0, 100.0);
-
-      // Center the survey - offset in world units (meters)
-      _offset = Offset(
+      final padding = 0.2; // 20% margin for better visibility
+      final scaleX = size.width / (bounds.width * (1 + padding * 2));
+      final scaleY = size.height / (bounds.height * (1 + padding * 2));
+      final calculatedScale = math.min(scaleX, scaleY).clamp(1.0, double.infinity);
+      final calculatedOffset = Offset(
         -bounds.center.dx,
         -bounds.center.dy,
       );
+
+      if (_viewMode == MapViewMode.plan) {
+        _planRotation = 0.0;
+        _planScale = calculatedScale;
+        _planOffset = calculatedOffset;
+      } else {
+        _elevationScale = calculatedScale;
+        _elevationOffset = calculatedOffset;
+      }
     });
   }
 
@@ -302,9 +364,11 @@ class _MapScreenState extends State<MapScreen> {
       for (int i = 0; i < manualPoints.length; i++) {
         if (i > 0) {
           final deltaDistance = manualPoints[i].distance - manualPoints[i - 1].distance;
-          final headingRad = manualPoints[i].heading * math.pi / 180;
+          // Use heading from previous point (matches painter logic)
+          final headingRad = manualPoints[i - 1].heading * math.pi / 180;
+          // North is up (negative Y), East is right (positive X) - matches painter
           x += deltaDistance * math.sin(headingRad);
-          y += deltaDistance * math.cos(headingRad);
+          y -= deltaDistance * math.cos(headingRad);
         }
 
         // Include passage dimensions in bounds
@@ -313,10 +377,14 @@ class _MapScreenState extends State<MapScreen> {
         final headingRad = manualPoints[i].heading * math.pi / 180;
         final perpRad = headingRad + math.pi / 2;
 
-        minX = math.min(minX, x - left * math.sin(perpRad).abs());
-        maxX = math.max(maxX, x + right * math.sin(perpRad).abs());
-        minY = math.min(minY, y - left * math.cos(perpRad).abs());
-        maxY = math.max(maxY, y + right * math.cos(perpRad).abs());
+        // Calculate perpendicular offset for left and right
+        final perpDx = math.cos(perpRad);
+        final perpDy = -math.sin(perpRad); // Negative because Y is inverted
+
+        minX = math.min(minX, math.min(x - left * perpDx, x + right * perpDx));
+        maxX = math.max(maxX, math.max(x - left * perpDx, x + right * perpDx));
+        minY = math.min(minY, math.min(y - left * perpDy, y + right * perpDy));
+        maxY = math.max(maxY, math.max(y - left * perpDy, y + right * perpDy));
       }
 
       return Rect.fromLTRB(minX, minY, maxX, maxY);
@@ -390,6 +458,24 @@ class _MapScreenState extends State<MapScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildNorthArrow() {
+    return Container(
+      width: 60,
+      height: 60,
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.7),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.cyan, width: 2),
+      ),
+      child: Transform.rotate(
+        angle: _planRotation,
+        child: CustomPaint(
+          painter: NorthArrowPainter(),
+        ),
       ),
     );
   }
@@ -980,4 +1066,62 @@ class CaveMapPainter extends CustomPainter {
         oldDelegate.rotation != rotation ||
         oldDelegate.viewMode != viewMode;
   }
+}
+
+/// Painter for north arrow indicator
+class NorthArrowPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final arrowLength = size.height * 0.35;
+
+    // Arrow pointing north (upward)
+    final arrowPath = Path();
+    final tipY = center.dy - arrowLength;
+    final baseY = center.dy + arrowLength * 0.3;
+
+    // Arrow head (triangle)
+    arrowPath.moveTo(center.dx, tipY);
+    arrowPath.lineTo(center.dx - arrowLength * 0.25, baseY);
+    arrowPath.lineTo(center.dx + arrowLength * 0.25, baseY);
+    arrowPath.close();
+
+    // Draw filled arrow
+    final arrowPaint = Paint()
+      ..color = Colors.red
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(arrowPath, arrowPaint);
+
+    // Draw arrow outline
+    final outlinePaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    canvas.drawPath(arrowPath, outlinePaint);
+
+    // Draw "N" letter
+    final textPainter = TextPainter(
+      text: const TextSpan(
+        text: 'N',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+
+    textPainter.layout();
+    textPainter.paint(
+      canvas,
+      Offset(
+        center.dx - textPainter.width / 2,
+        center.dy + arrowLength * 0.5,
+      ),
+    );
+  }
+
+  @override
+  bool shouldRepaint(NorthArrowPainter oldDelegate) => false;
 }
