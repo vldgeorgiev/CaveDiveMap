@@ -439,21 +439,25 @@ class StorageService {
 ### Reusable Widgets
 
 #### 1. CircularActionButton
-**Purpose**: Reusable circular button with icon, color, and gesture handling.
+**Purpose**: Reusable circular button with icon, color, and glove-friendly gesture handling.
 
 **Props**:
-- `double size`: Button diameter
+- `double size`: Button diameter (default: 90px)
 - `Color color`: Background color
 - `IconData icon`: Icon to display
 - `VoidCallback? onTap`: Tap callback
 - `VoidCallback? onLongPress`: Long-press callback
 - `VoidCallback? onTapDown`: Tap down callback (for custom gesture handling)
+- `double slopTolerance`: Movement tolerance in pixels (default: 30px)
 
 **Features**:
 - Circular shape with BoxDecoration
 - Icon scaled to 35-40% of button size
 - Shadow effect
 - Optional text label (for "Reset" button)
+- StatefulWidget with tap position tracking
+- 30px movement tolerance prevents glove-induced tap cancellation
+- Automatic tap target expansion to minimum 48x48px
 
 #### 2. PositionedButton
 **Purpose**: Wrapper that positions CircularActionButton using ButtonConfig.
@@ -620,8 +624,10 @@ Show success SnackBar
 
 ### 3. Touch Target Size
 - Minimum button size: 48x48 logical pixels (per Material Design)
-- Default button sizes (70-75) exceed this
-- Customization slider minimum: 40 (borderline, could be increased to 48)
+- Default button sizes: 90px (optimized for underwater glove use)
+- Customization slider range: 40-200px
+- Tap target automatically expands to minimum 48x48px even for smaller buttons
+- 30px movement tolerance (slop) for glove-friendly tap detection
 
 ### 4. Screen Reader Support
 - Add semantic labels to all interactive elements

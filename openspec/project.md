@@ -255,6 +255,10 @@ Essential for underwater usability with thick waterproof cases:
 - Separate layouts for different screens
 - Settings persist via SharedPreferences
 - Accommodates limited touch precision underwater
+- Default button size: 90px
+- Maximum button size: 150px (customizable via settings)
+- 30px movement tolerance (slop) prevents accidental tap cancellation from glove deformation
+- Minimum 48x48px tap target area ensures reliable touch detection
 
 ### Compass Calibration
 
