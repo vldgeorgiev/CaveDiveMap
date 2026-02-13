@@ -21,7 +21,8 @@ class PCARotationConfig {
   /// is computed. This reduces startup latency so early rotations aren't missed.
   ///
   /// Example: windowSizeSeconds=1.0 @ 100Hz => capacity≈100 samples.
-  /// minWindowFillFraction=0.5 => start after ≈50 samples (~0.5s).
+  /// minWindowFillFraction=0.2 => start after ≈20 samples (~0.2s).
+  /// Aggressive fill reduces startup delay from ~0.5s to ~0.2s.
   final double minWindowFillFraction;
 
   /// Baseline removal alpha (EMA smoothing factor).
@@ -50,19 +51,27 @@ class PCARotationConfig {
   /// window before rejecting due to excessive linear motion.
   final double maxAccelStdDev;
 
+  /// Minimum phase advance (radians) before emitting distance update callback.
+  /// Examples:
+  /// - π/18 ≈ 10° rotations (frequent updates)
+  /// - π/9 ≈ 20° rotations (default - good balance)
+  /// - π/6 ≈ 30° rotations (less frequent)
+  final double minPhaseForDistanceUpdate;
+
   /// Validity gate configuration.
   final ValidityGateConfig validityConfig;
 
-  const PCARotationConfig({
+    const PCARotationConfig({
     this.samplingRateHz = 100.0,
     this.windowSizeSeconds = 1.0,
-    this.minWindowFillFraction = 0.5,
+    this.minWindowFillFraction = 0.2,
     this.baselineAlpha = 0.02,
     this.pausedBaselineAlpha = 0.001,
     this.planarGraceMs = 1200,
     this.inertialGraceMs = 800,
     this.maxGyroRadPerSec = 6.0,
     this.maxAccelStdDev = 4.0,
+    this.minPhaseForDistanceUpdate = 3.141592653589793 / 9, // π/9 ≈ 20°
     this.validityConfig = const ValidityGateConfig(),
   });
 }
@@ -100,7 +109,9 @@ class PCARotationDetector extends ChangeNotifier {
   int _rotationCount = 0; // emitted forward count (for consumers)
   int _forwardCount = 0;  // internal forward emissions
   double _forwardPhaseAccum = 0.0; // cumulative positive phase (rad) for forward counts only
+  double _totalForwardPhase = 0.0; // continuous total phase (not reduced by 2π) for fractional tracking
   int _forwardSign = 0; // +1/-1 once direction is learned, 0 = unknown
+  int _startTimestampMs = 0; // Track time since start for graduated quality threshold
   PCAResult? _latestPCA;
   PCAResult? _lockedPCA;
   ValidityGateResult? _latestValidity;
@@ -108,6 +119,12 @@ class PCARotationDetector extends ChangeNotifier {
   bool _isActive = false;
   int _debugSampleCount = 0; // For debug logging throttle
   Vector2 _lastProjected = const Vector2(0, 0); // For debug output
+  double _lastEmittedPhase = 0.0; // Last phase value when distance update was emitted
+  double _wheelCircumference = 0.263; // meters, default for typical measurement wheel
+
+  /// Callback fired when distance advances by configured phase interval.
+  /// Use this to update UI or trigger survey point creation at fractional rotations.
+  Function()? onDistanceUpdate;
 
   int _lastPlanarStrongTimestampMs = 0;
   int _lastBasisUpdateMs = 0;
@@ -189,6 +206,11 @@ class PCARotationDetector extends ChangeNotifier {
   /// [timestamp]: Sample timestamp in milliseconds
   void processSample(Vector3 reading, int timestamp) {
     if (!_isActive) return;
+
+    // Track start time for graduated quality threshold
+    if (_startTimestampMs == 0) {
+      _startTimestampMs = timestamp;
+    }
 
     // Step 1: Remove baseline (Earth's field + drift)
     // IMPORTANT: during brief pauses, the magnet field can become a constant
@@ -336,7 +358,11 @@ class PCARotationDetector extends ChangeNotifier {
     final withinInertialGrace = _lastInertialOkMs != 0 &&
         (timestamp - _lastInertialOkMs) <= config.inertialGraceMs;
 
-    final canEmit = _latestValidity!.qualityScore > 0.60 &&
+    // Graduated quality threshold: lower during first 2 seconds to catch early rotations
+    final timeSinceStart = timestamp - _startTimestampMs;
+    final qualityThreshold = (timeSinceStart < 2000) ? 0.45 : 0.60;
+
+    final canEmit = _latestValidity!.qualityScore > qualityThreshold &&
         _latestValidity!.isWithinFrequencyLimit &&
         (_latestValidity!.isPlanar || withinPlanarGrace) &&
         _latestValidity!.hasPhaseMotion &&
@@ -345,19 +371,27 @@ class PCARotationDetector extends ChangeNotifier {
         (inertialOkNow || withinInertialGrace); // reject sustained figure-8 / large handset motion, allow gentle translation
 
     // Learn which direction is "forward" from the first stable motion (planar + coherent).
+    // OPTIMIZATION: Don't reset accumulators - retroactively count initial rotations.
     if (_forwardSign == 0 &&
         _latestValidity != null &&
         _latestValidity!.hasPhaseMotion &&
         phaseChange.abs() > 0.02) {
       _forwardSign = phaseChange > 0 ? 1 : -1;
-      _forwardPhaseAccum = 0.0;
+      // Don't reset accumulators - keep accumulated phase from initial motion
+      // This allows counting rotations that occurred before direction was learned
     }
 
     // Accumulate only forward-directed phase (relative to learned sign).
+    // CRITICAL: Only accumulate fractional phase when validity gates pass (canEmit).
+    // This prevents distance accumulation from noise, invalid signals, or stationary phone.
     final signedPhaseChange =
         _forwardSign == 0 ? phaseChange : phaseChange * _forwardSign;
     if (signedPhaseChange > 0) {
-      _forwardPhaseAccum += signedPhaseChange;
+      _forwardPhaseAccum += signedPhaseChange; // Always accumulate for integer count
+      // Only accumulate fractional distance during valid signals
+      if (canEmit) {
+        _totalForwardPhase += signedPhaseChange;
+      }
     }
     final twoPi = 2 * 3.141592653589793;
     int pendingForward = 0;
@@ -391,10 +425,44 @@ class PCARotationDetector extends ChangeNotifier {
             'Projected: (${_lastProjected.x.toStringAsFixed(2)}, ${_lastProjected.y.toStringAsFixed(2)})');
       notifyListeners();
     }
+
+    // Step 9: Check for fractional distance update (partial rotation callback)
+    if (canEmit) {
+      final phaseAdvance = (_totalForwardPhase - _lastEmittedPhase).abs();
+      if (phaseAdvance >= config.minPhaseForDistanceUpdate) {
+        _lastEmittedPhase = _totalForwardPhase;
+        onDistanceUpdate?.call();
+        // Note: notifyListeners() already called above for rotation count
+      }
+    }
   }
 
-  /// Current rotation count.
+  /// Current rotation count (integer rotations only).
   int get rotationCount => _rotationCount;
+
+  /// Fractional rotations including partial rotations.
+  ///
+  /// Returns the total phase advance divided by 2π, representing
+  /// complete + partial rotations. Examples:
+  /// - 0.5 = half rotation (180°)
+  /// - 1.25 = one and a quarter rotations (450°)
+  /// - 2.0 = exactly two complete rotations
+  ///
+  /// This enables distance measurement at any point during rotation,
+  /// not just at 2π boundaries. Respects all validity gates - only
+  /// advances when signal is valid.
+  double get fractionalRotations {
+    return _totalForwardPhase.abs() / (2 * 3.141592653589793);
+  }
+
+  /// Continuous distance traveled (meters) including partial rotations.
+  ///
+  /// Computed as fractionalRotations × wheelCircumference.
+  /// Updates smoothly during rotation rather than in discrete steps.
+  /// Set wheel circumference via [setWheelCircumference].
+  double get continuousDistance {
+    return fractionalRotations * _wheelCircumference;
+  }
 
   /// Latest PCA result (for debugging/diagnostics).
   PCAResult? get latestPCA => _latestPCA;
@@ -423,12 +491,22 @@ class PCARotationDetector extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Set wheel circumference for distance calculations.
+  ///
+  /// [circumference]: Wheel circumference in meters
+  void setWheelCircumference(double circumference) {
+    _wheelCircumference = circumference;
+  }
+
   /// Reset all state (rotation count, buffers, etc.).
   void reset() {
     _rotationCount = 0;
     _forwardCount = 0;
     _forwardPhaseAccum = 0.0;
+    _totalForwardPhase = 0.0;
     _forwardSign = 0;
+    _lastEmittedPhase = 0.0;
+    _startTimestampMs = 0;
     _latestPCA = null;
     _lockedPCA = null;
     _latestValidity = null;

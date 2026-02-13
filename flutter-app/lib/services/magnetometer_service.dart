@@ -118,6 +118,25 @@ class MagnetometerService extends ChangeNotifier {
         : 0.0;
   }
 
+  /// Fractional rotations (includes partial rotations) for PCA algorithm.
+  /// Returns 0.0 for threshold algorithm.
+  double get fractionalRotations {
+    return _algorithm == RotationAlgorithm.pca
+        ? (_pcaDetector?.fractionalRotations ?? 0.0)
+        : _rotationCount.toDouble();
+  }
+
+  /// Continuous distance including fractional rotations (meters).
+  /// For PCA mode: uses fractional rotations for smooth updates.
+  /// For threshold mode: uses integer rotation count only.
+  double get fractionalDistance {
+    if (_algorithm == RotationAlgorithm.pca && _pcaDetector != null) {
+      return _currentDistance - (_rotationCount * _wheelCircumference) + _pcaDetector!.continuousDistance;
+    }
+    // Threshold mode: same as currentDistance (integer rotations only)
+    return _currentDistance;
+  }
+
   /// Start magnetometer recording
   void startRecording({
     double initialDepth = 0.0,
@@ -206,6 +225,12 @@ class MagnetometerService extends ChangeNotifier {
         wheelCircumference; // Circumference passed in (pre-calculated)
     _minPeakThreshold = minPeakThreshold;
     _maxPeakThreshold = maxPeakThreshold;
+
+    // Update PCA detector wheel circumference if active
+    if (_pcaDetector != null) {
+      _pcaDetector!.setWheelCircumference(wheelCircumference);
+    }
+
     notifyListeners();
   }
 
@@ -219,6 +244,7 @@ class MagnetometerService extends ChangeNotifier {
     // Initialize PCA detector if using PCA algorithm
     if (_algorithm == RotationAlgorithm.pca && _pcaDetector == null) {
       _pcaDetector = PCARotationDetector();
+      _pcaDetector!.setWheelCircumference(_wheelCircumference);
       _pcaDetector!.addListener(_onPCARotationCountChanged);
       _pcaDetector!.start();
       print('[MAG] 🔧 PCA detector initialized and started');

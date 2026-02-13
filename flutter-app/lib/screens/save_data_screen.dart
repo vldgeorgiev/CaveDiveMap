@@ -238,7 +238,7 @@ class _SaveDataScreenState extends State<SaveDataScreen> {
 
     final manualPoint = SurveyData(
       recordNumber: magnetometerService.currentPointNumber + 1,
-      distance: magnetometerService.totalDistance,
+      distance: magnetometerService.fractionalDistance,
       heading: widget.capturedHeading, // Use static captured heading
       depth: _depth, // Use manually entered depth
       left: _left,
@@ -303,7 +303,7 @@ class _SaveDataScreenState extends State<SaveDataScreen> {
                             const SizedBox(height: 8),
                             _buildInfoRow(
                               'Distance',
-                              '${magnetometer.totalDistance.toStringAsFixed(2)} m',
+                              '${magnetometer.fractionalDistance.toStringAsFixed(2)} m',
                             ),
                             const SizedBox(height: 8),
                             _buildInfoRow(

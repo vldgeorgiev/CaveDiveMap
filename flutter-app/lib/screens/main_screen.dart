@@ -317,10 +317,10 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
                           HeadingAccuracyIndicator(accuracy: compass.accuracy),
                           const SizedBox(height: AppSpacing.small),
 
-                          // Distance with large typography
+                          // Distance with large typography (fractional for smooth updates)
                           _buildLargeDataRow(
                             'Distance',
-                            '${magnetometer.totalDistance.toStringAsFixed(2)} m',
+                            '${magnetometer.fractionalDistance.toStringAsFixed(2)} m',
                             AppTextStyles.largeTitle,
                           ),
                           const SizedBox(height: AppSpacing.small),
