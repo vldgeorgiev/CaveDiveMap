@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/button_config.dart';
 import '../services/button_customization_service.dart';
 import '../utils/theme_extensions.dart';
+import '../utils/underwater_button_layout.dart';
 import '../widgets/draggable_button_customizer.dart';
 
 enum ScreenType { mainScreen, saveDataScreen }
@@ -355,7 +356,7 @@ class _ButtonCustomizationScreenState extends State<ButtonCustomizationScreen> {
                                   ),
                                   child: Slider(
                                     value: selectedConfig.size,
-                                    min: 40,
+                                    min: UnderwaterButtonLayout.minSize,
                                     max: 150,
                                     divisions: 22,
                                     onChanged: (value) {
@@ -393,6 +394,7 @@ class _ButtonCustomizationScreenState extends State<ButtonCustomizationScreen> {
   ) {
     return [
       _buildDraggableButton(
+        service: service,
         id: 'main_save',
         config: service.mainSaveButton,
         label: 'Save',
@@ -403,6 +405,7 @@ class _ButtonCustomizationScreenState extends State<ButtonCustomizationScreen> {
         onConfigChanged: service.updateMainSaveButton,
       ),
       _buildDraggableButton(
+        service: service,
         id: 'main_map',
         config: service.mainMapButton,
         label: 'Map',
@@ -413,6 +416,7 @@ class _ButtonCustomizationScreenState extends State<ButtonCustomizationScreen> {
         onConfigChanged: service.updateMainMapButton,
       ),
       _buildDraggableButton(
+        service: service,
         id: 'main_reset',
         config: service.mainResetButton,
         label: 'Reset',
@@ -423,6 +427,7 @@ class _ButtonCustomizationScreenState extends State<ButtonCustomizationScreen> {
         onConfigChanged: service.updateMainResetButton,
       ),
       _buildDraggableButton(
+        service: service,
         id: 'main_camera',
         config: service.mainCameraButton,
         label: 'Camera',
@@ -442,6 +447,7 @@ class _ButtonCustomizationScreenState extends State<ButtonCustomizationScreen> {
   ) {
     return [
       _buildDraggableButton(
+        service: service,
         id: 'save_save',
         config: service.saveDataSaveButton,
         label: 'Save',
@@ -452,6 +458,7 @@ class _ButtonCustomizationScreenState extends State<ButtonCustomizationScreen> {
         onConfigChanged: service.updateSaveDataSaveButton,
       ),
       _buildDraggableButton(
+        service: service,
         id: 'save_increment',
         config: service.saveDataIncrementButton,
         label: 'Plus',
@@ -462,6 +469,7 @@ class _ButtonCustomizationScreenState extends State<ButtonCustomizationScreen> {
         onConfigChanged: service.updateSaveDataIncrementButton,
       ),
       _buildDraggableButton(
+        service: service,
         id: 'save_decrement',
         config: service.saveDataDecrementButton,
         label: 'Minus',
@@ -472,6 +480,7 @@ class _ButtonCustomizationScreenState extends State<ButtonCustomizationScreen> {
         onConfigChanged: service.updateSaveDataDecrementButton,
       ),
       _buildDraggableButton(
+        service: service,
         id: 'save_cycle',
         config: service.saveDataCycleButton,
         label: 'Cycle',
@@ -485,6 +494,7 @@ class _ButtonCustomizationScreenState extends State<ButtonCustomizationScreen> {
   }
 
   Widget _buildDraggableButton({
+    required ButtonCustomizationService service,
     required String id,
     required ButtonConfig config,
     required String label,
@@ -492,7 +502,7 @@ class _ButtonCustomizationScreenState extends State<ButtonCustomizationScreen> {
     required IconData icon,
     required Size screenSize,
     required double topBarHeight,
-    required Function(ButtonConfig) onConfigChanged,
+    required ValueChanged<ButtonConfig> onConfigChanged,
   }) {
     return DraggableButtonCustomizer(
       config: config,
@@ -506,6 +516,11 @@ class _ButtonCustomizationScreenState extends State<ButtonCustomizationScreen> {
           _selectedButtonId = _selectedButtonId == id ? null : id;
         });
       },
+      resolveConstraints: (proposed) => _resolveButtonConstraints(
+        service: service,
+        buttonId: id,
+        proposedConfig: proposed,
+      ),
       screenSize: screenSize,
       topBarHeight: topBarHeight,
     );
@@ -556,7 +571,7 @@ class _ButtonCustomizationScreenState extends State<ButtonCustomizationScreen> {
                       ),
                       child: Slider(
                         value: selectedConfig.size,
-                        min: 40,
+                        min: UnderwaterButtonLayout.minSize,
                         max: 150,
                         divisions: 22,
                         onChanged: (value) {
@@ -659,47 +674,101 @@ class _ButtonCustomizationScreenState extends State<ButtonCustomizationScreen> {
     double size,
   ) {
     if (_selectedButtonId == null) return;
+    final clampedSize = size.clamp(
+      UnderwaterButtonLayout.minSize,
+      UnderwaterButtonLayout.maxSize,
+    );
 
     switch (_selectedButtonId) {
       case 'main_save':
         service.updateMainSaveButton(
-          service.mainSaveButton.copyWith(size: size),
+          service.mainSaveButton.copyWith(size: clampedSize),
         );
         break;
       case 'main_map':
-        service.updateMainMapButton(service.mainMapButton.copyWith(size: size));
+        service.updateMainMapButton(
+          service.mainMapButton.copyWith(size: clampedSize),
+        );
         break;
       case 'main_reset':
         service.updateMainResetButton(
-          service.mainResetButton.copyWith(size: size),
+          service.mainResetButton.copyWith(size: clampedSize),
         );
         break;
       case 'main_camera':
         service.updateMainCameraButton(
-          service.mainCameraButton.copyWith(size: size),
+          service.mainCameraButton.copyWith(size: clampedSize),
         );
         break;
       case 'save_save':
         service.updateSaveDataSaveButton(
-          service.saveDataSaveButton.copyWith(size: size),
+          service.saveDataSaveButton.copyWith(size: clampedSize),
         );
         break;
       case 'save_increment':
         service.updateSaveDataIncrementButton(
-          service.saveDataIncrementButton.copyWith(size: size),
+          service.saveDataIncrementButton.copyWith(size: clampedSize),
         );
         break;
       case 'save_decrement':
         service.updateSaveDataDecrementButton(
-          service.saveDataDecrementButton.copyWith(size: size),
+          service.saveDataDecrementButton.copyWith(size: clampedSize),
         );
         break;
       case 'save_cycle':
         service.updateSaveDataCycleButton(
-          service.saveDataCycleButton.copyWith(size: size),
+          service.saveDataCycleButton.copyWith(size: clampedSize),
         );
         break;
     }
+  }
+
+  ButtonConfig _resolveButtonConstraints({
+    required ButtonCustomizationService service,
+    required String buttonId,
+    required ButtonConfig proposedConfig,
+  }) {
+    final configs = _currentScreenConfigs(service);
+    return UnderwaterButtonLayout.resolveForButton(
+      buttonId: buttonId,
+      proposedConfig: proposedConfig,
+      currentConfigs: configs,
+      priorityOrder: _priorityOrderForScreen(movingButtonId: buttonId),
+    );
+  }
+
+  Map<String, ButtonConfig> _currentScreenConfigs(
+    ButtonCustomizationService service,
+  ) {
+    if (_selectedScreen == ScreenType.mainScreen) {
+      return {
+        'main_save': service.mainSaveButton,
+        'main_map': service.mainMapButton,
+        'main_reset': service.mainResetButton,
+        'main_camera': service.mainCameraButton,
+      };
+    }
+
+    return {
+      'save_save': service.saveDataSaveButton,
+      'save_increment': service.saveDataIncrementButton,
+      'save_decrement': service.saveDataDecrementButton,
+      'save_cycle': service.saveDataCycleButton,
+    };
+  }
+
+  List<String> _priorityOrderForScreen({required String movingButtonId}) {
+    final order = _selectedScreen == ScreenType.mainScreen
+        ? <String>['main_save', 'main_map', 'main_reset', 'main_camera']
+        : <String>[
+            'save_save',
+            'save_increment',
+            'save_decrement',
+            'save_cycle',
+          ];
+    order.remove(movingButtonId);
+    order.add(movingButtonId);
+    return order;
   }
 
   Future<void> _confirmReset(ButtonCustomizationService service) async {

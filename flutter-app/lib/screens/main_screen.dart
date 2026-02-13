@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'dart:async';
 import '../services/magnetometer_service.dart';
 import '../services/compass_service.dart';
 import '../services/storage_service.dart';
@@ -8,6 +7,7 @@ import '../services/export_service.dart';
 import '../services/button_customization_service.dart';
 import '../services/rotation_detection/rotation_algorithm.dart';
 import '../models/settings.dart';
+import '../widgets/underwater_action_button.dart';
 import '../widgets/positioned_button.dart';
 import '../widgets/monospaced_text.dart';
 import '../widgets/heading_accuracy_indicator.dart';
@@ -25,13 +25,12 @@ class MainScreen extends StatefulWidget {
   State<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateMixin {
+class _MainScreenState extends State<MainScreen>
+    with SingleTickerProviderStateMixin {
   bool _showCalibrationToast = false;
-  Timer? _resetHoldTimer;
   bool _isResetting = false;
   bool _isHoldingReset = false;
   double _resetHoldProgress = 0.0;
-  Timer? _resetProgressTimer;
 
   @override
   void initState() {
@@ -65,8 +64,6 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
     // Stop sensors when leaving screen
     context.read<MagnetometerService>().stopListening();
     context.read<CompassService>().stopListening();
-    _resetHoldTimer?.cancel();
-    _resetProgressTimer?.cancel();
     super.dispose();
   }
 
@@ -130,50 +127,26 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
     compass.startListening();
   }
 
-  void _onResetTapDown() {
+  void _onResetHoldProgress(double progress) {
+    if (!mounted) return;
     setState(() {
-      _isHoldingReset = true;
-      _resetHoldProgress = 0.0;
-    });
-
-    // Start the hold timer
-    _resetHoldTimer = Timer(const Duration(seconds: 6), () {
-      _performReset();
-    });
-
-    // Start progress animation (updates 60 times per second for smooth animation)
-    const updateInterval = Duration(milliseconds: 16); // ~60fps
-    const totalDuration = 6000; // 6 seconds in milliseconds
-    int elapsed = 0;
-
-    _resetProgressTimer = Timer.periodic(updateInterval, (timer) {
-      elapsed += updateInterval.inMilliseconds;
-      if (mounted) {
-        setState(() {
-          _resetHoldProgress = (elapsed / totalDuration).clamp(0.0, 1.0);
-        });
-      }
-
-      if (elapsed >= totalDuration) {
-        timer.cancel();
-      }
+      _resetHoldProgress = progress;
+      _isHoldingReset = progress > 0.0;
     });
   }
 
-  void _onResetTapUp() {
-    _resetHoldTimer?.cancel();
-    _resetHoldTimer = null;
-    _resetProgressTimer?.cancel();
-    _resetProgressTimer = null;
+  void _onResetHoldCancelled() {
+    final didPartiallyHold =
+        _isHoldingReset && _resetHoldProgress > 0.0 && _resetHoldProgress < 1.0;
 
-    final wasHolding = _isHoldingReset;
-    setState(() {
-      _isHoldingReset = false;
-      _resetHoldProgress = 0.0;
-    });
+    if (mounted) {
+      setState(() {
+        _isHoldingReset = false;
+        _resetHoldProgress = 0.0;
+      });
+    }
 
-    if (!_isResetting && wasHolding && _resetHoldProgress < 1.0) {
-      // Show hint about long-press
+    if (!_isResetting && didPartiallyHold && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Hold for 6 seconds to reset'),
@@ -181,18 +154,6 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
         ),
       );
     }
-  }
-
-  void _onResetTapCancel() {
-    _resetHoldTimer?.cancel();
-    _resetHoldTimer = null;
-    _resetProgressTimer?.cancel();
-    _resetProgressTimer = null;
-
-    setState(() {
-      _isHoldingReset = false;
-      _resetHoldProgress = 0.0;
-    });
   }
 
   Future<void> _performReset() async {
@@ -295,109 +256,122 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
             ButtonCustomizationService,
             Settings
           >(
-            builder: (context, magnetometer, compass, buttonService, settings, child) {
-              return Stack(
-                children: [
-                  // Main sensor data display
-                  SafeArea(
-                    child: Padding(
-                      padding: AppSpacing.screenPadding,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Heading with large typography
-                          _buildLargeDataRow(
-                            'Heading',
-                            '${compass.heading.toStringAsFixed(1)}°',
-                            AppTextStyles.largeTitle,
+            builder:
+                (
+                  context,
+                  magnetometer,
+                  compass,
+                  buttonService,
+                  settings,
+                  child,
+                ) {
+                  return Stack(
+                    children: [
+                      // Main sensor data display
+                      SafeArea(
+                        child: Padding(
+                          padding: AppSpacing.screenPadding,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Heading with large typography
+                              _buildLargeDataRow(
+                                'Heading',
+                                '${compass.heading.toStringAsFixed(1)}°',
+                                AppTextStyles.largeTitle,
+                              ),
+                              const SizedBox(height: 4),
+
+                              // Heading accuracy indicator
+                              HeadingAccuracyIndicator(
+                                accuracy: compass.accuracy,
+                              ),
+                              const SizedBox(height: AppSpacing.small),
+
+                              // Distance with large typography
+                              _buildLargeDataRow(
+                                'Distance',
+                                '${magnetometer.totalDistance.toStringAsFixed(2)} m',
+                                AppTextStyles.largeTitle,
+                              ),
+                              const SizedBox(height: AppSpacing.small),
+
+                              // Point number (smaller text)
+                              _buildLargeDataRow(
+                                'Points',
+                                context
+                                    .watch<StorageService>()
+                                    .surveyPoints
+                                    .length
+                                    .toString(),
+                                AppTextStyles.body,
+                              ),
+                              const SizedBox(height: AppSpacing.small),
+
+                              // Magnetic strength indicator
+                              _buildMagneticStrengthIndicator(
+                                magnetometer.uncalibratedMagnitude,
+                                settings.minPeakThreshold,
+                                settings.maxPeakThreshold,
+                                magnetometer.algorithm,
+                                magnetometer.signalQuality,
+                              ),
+
+                              // Spacer to push buttons to bottom
+                              const Spacer(),
+                            ],
                           ),
-                          const SizedBox(height: 4),
-
-                          // Heading accuracy indicator
-                          HeadingAccuracyIndicator(accuracy: compass.accuracy),
-                          const SizedBox(height: AppSpacing.small),
-
-                          // Distance with large typography
-                          _buildLargeDataRow(
-                            'Distance',
-                            '${magnetometer.totalDistance.toStringAsFixed(2)} m',
-                            AppTextStyles.largeTitle,
-                          ),
-                          const SizedBox(height: AppSpacing.small),
-
-                          // Point number (smaller text)
-                          _buildLargeDataRow(
-                            'Points',
-                            context
-                                .watch<StorageService>()
-                                .surveyPoints
-                                .length
-                                .toString(),
-                            AppTextStyles.body,
-                          ),
-                          const SizedBox(height: AppSpacing.small),
-
-                          // Magnetic strength indicator
-                          _buildMagneticStrengthIndicator(
-                            magnetometer.uncalibratedMagnitude,
-                            settings.minPeakThreshold,
-                            settings.maxPeakThreshold,
-                            magnetometer.algorithm,
-                            magnetometer.signalQuality,
-                          ),
-
-                          // Spacer to push buttons to bottom
-                          const Spacer(),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
 
-                  // Circular action buttons positioned via ButtonConfig
-                  PositionedButton(
-                    config: buttonService.mainSaveButton,
-                    onPressed: _navigateToSaveData,
-                    icon: Icons.save,
-                    label: 'Save',
-                    color: AppColors.actionSave,
-                  ),
+                      // Underwater action buttons positioned via ButtonConfig
+                      PositionedButton(
+                        config: buttonService.mainSaveButton,
+                        onPressed: _navigateToSaveData,
+                        icon: Icons.save,
+                        label: 'Save',
+                        color: AppColors.actionSave,
+                      ),
 
-                  PositionedButton(
-                    config: buttonService.mainMapButton,
-                    onPressed: _navigateToMap,
-                    icon: Icons.map,
-                    label: 'Map',
-                    color: AppColors.actionMap,
-                  ),
+                      PositionedButton(
+                        config: buttonService.mainMapButton,
+                        onPressed: _navigateToMap,
+                        icon: Icons.map,
+                        label: 'Map',
+                        color: AppColors.actionMap,
+                      ),
 
-                  PositionedButton(
-                    config: buttonService.mainResetButton,
-                    onTapDown: (_) => _onResetTapDown(),
-                    onTapUp: (_) => _onResetTapUp(),
-                    onTapCancel: _onResetTapCancel,
-                    icon: Icons.refresh,
-                    label: 'Reset',
-                    color: AppColors.actionReset,
-                    showProgress: _isHoldingReset,
-                    progressValue: _resetHoldProgress,
-                  ),
+                      PositionedButton(
+                        config: buttonService.mainResetButton,
+                        onPressed: _performReset,
+                        actionProfile: ButtonActionProfile.holdToConfirm,
+                        holdDuration: const Duration(seconds: 6),
+                        onHoldProgress: _onResetHoldProgress,
+                        onHoldCancelled: _onResetHoldCancelled,
+                        icon: Icons.refresh,
+                        label: 'Reset',
+                        color: AppColors.actionReset,
+                        showProgress: _isHoldingReset,
+                        progressValue: _resetHoldProgress,
+                      ),
 
-                  PositionedButton(
-                    config: buttonService.mainCameraButton,
-                    onPressed: _showCameraNotImplemented,
-                    icon: Icons.camera_alt,
-                    label: 'Photo',
-                    color: AppColors.actionSecondary,
-                  ),
+                      PositionedButton(
+                        config: buttonService.mainCameraButton,
+                        onPressed: _showCameraNotImplemented,
+                        icon: Icons.camera_alt,
+                        label: 'Photo',
+                        color: AppColors.actionSecondary,
+                      ),
 
-                  // Calibration toast overlay
-                  if (_showCalibrationToast)
-                    CalibrationToast(
-                      message: 'Move device in figure-8 to calibrate compass',
-                    ),
-                ],
-              );
-            },
+                      // Calibration toast overlay
+                      if (_showCalibrationToast)
+                        CalibrationToast(
+                          message:
+                              'Move device in figure-8 to calibrate compass',
+                        ),
+                    ],
+                  );
+                },
           ),
     );
   }
@@ -523,5 +497,4 @@ class _MainScreenState extends State<MainScreen> with SingleTickerProviderStateM
       ],
     );
   }
-
 }

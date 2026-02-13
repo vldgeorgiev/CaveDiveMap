@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
 import '../models/button_config.dart';
 import '../utils/theme_extensions.dart';
-import 'circular_action_button.dart';
+import 'underwater_action_button.dart';
 
-/// A draggable button wrapper for customization interface
-/// Allows users to visually position buttons by dragging them around the screen
+/// A draggable button wrapper for customization interface.
 class DraggableButtonCustomizer extends StatefulWidget {
   final ButtonConfig config;
   final String label;
   final Color color;
   final IconData icon;
   final bool isSelected;
-  final Function(ButtonConfig) onConfigChanged;
-  final Function() onTap;
+  final ValueChanged<ButtonConfig> onConfigChanged;
+  final VoidCallback onTap;
   final Size screenSize;
   final double topBarHeight;
+  final ButtonConfig Function(ButtonConfig proposed)? resolveConstraints;
 
   const DraggableButtonCustomizer({
     super.key,
@@ -27,6 +27,7 @@ class DraggableButtonCustomizer extends StatefulWidget {
     required this.onTap,
     required this.screenSize,
     this.topBarHeight = 0.0,
+    this.resolveConstraints,
   });
 
   @override
@@ -54,8 +55,6 @@ class _DraggableButtonCustomizerState extends State<DraggableButtonCustomizer> {
   }
 
   void _updatePositionFromConfig() {
-    // Convert from center-based offsets to absolute screen position
-    // Adjust center to account for top bar
     final availableHeight = widget.screenSize.height - widget.topBarHeight;
     final centerX = widget.screenSize.width / 2;
     final centerY = widget.topBarHeight + (availableHeight / 2);
@@ -77,15 +76,12 @@ class _DraggableButtonCustomizerState extends State<DraggableButtonCustomizer> {
       _isDragging = false;
     });
 
-    // Convert from absolute position back to center-based offsets
-    // Adjust center to account for top bar
     final availableHeight = widget.screenSize.height - widget.topBarHeight;
     final centerX = widget.screenSize.width / 2;
     final centerY = widget.topBarHeight + (availableHeight / 2);
     final newOffsetX = _currentPosition.dx - centerX;
     final newOffsetY = _currentPosition.dy - centerY;
 
-    // Clamp to reasonable bounds (within available area below top bar)
     final clampedOffsetX = newOffsetX.clamp(
       -centerX + widget.config.size / 2,
       centerX - widget.config.size / 2,
@@ -95,14 +91,20 @@ class _DraggableButtonCustomizerState extends State<DraggableButtonCustomizer> {
       (availableHeight / 2) - widget.config.size / 2,
     );
 
-    // Update the config
-    widget.onConfigChanged(
-      widget.config.copyWith(offsetX: clampedOffsetX, offsetY: clampedOffsetY),
+    var updated = widget.config.copyWith(
+      offsetX: clampedOffsetX,
+      offsetY: clampedOffsetY,
     );
+    if (widget.resolveConstraints != null) {
+      updated = widget.resolveConstraints!(updated);
+    }
+    widget.onConfigChanged(updated);
   }
 
   @override
   Widget build(BuildContext context) {
+    final borderRadius = BorderRadius.circular(widget.config.size * 0.24);
+
     return Positioned(
       left: _currentPosition.dx - widget.config.size / 2,
       top: _currentPosition.dy - widget.config.size / 2,
@@ -116,12 +118,11 @@ class _DraggableButtonCustomizerState extends State<DraggableButtonCustomizer> {
           child: Stack(
             clipBehavior: Clip.none,
             children: [
-              // The button itself
               Container(
                 width: widget.config.size,
                 height: widget.config.size,
                 decoration: BoxDecoration(
-                  shape: BoxShape.circle,
+                  borderRadius: borderRadius,
                   border: widget.isSelected
                       ? Border.all(color: AppColors.dataPrimary, width: 3)
                       : null,
@@ -134,15 +135,17 @@ class _DraggableButtonCustomizerState extends State<DraggableButtonCustomizer> {
                       ),
                   ],
                 ),
-                child: CircularActionButton(
-                  color: widget.color,
-                  icon: widget.icon,
-                  size: widget.config.size,
-                  onTap: widget.onTap,
+                child: IgnorePointer(
+                  // Outer GestureDetector owns select/drag interactions.
+                  // Ignoring inner button pointer handling prevents double-tap
+                  // toggles (select then immediately deselect).
+                  child: UnderwaterActionButton(
+                    color: widget.color,
+                    icon: widget.icon,
+                    size: widget.config.size,
+                  ),
                 ),
               ),
-
-              // Label below button when selected
               if (widget.isSelected)
                 Positioned(
                   bottom: -25,

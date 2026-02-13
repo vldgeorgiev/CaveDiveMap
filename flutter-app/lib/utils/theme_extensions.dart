@@ -151,7 +151,7 @@ class AppButtonSizes {
   static const double saveDataScreenDefault = 90.0;
 
   // Button size constraints
-  static const double minSize = 40.0;
+  static const double minSize = 60.0;
   static const double maxSize = 150.0;
 
   // Position offset constraints

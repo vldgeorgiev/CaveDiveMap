@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/button_config.dart';
-import 'circular_action_button.dart';
+import 'underwater_action_button.dart';
 
-/// Positions a circular action button using ButtonConfig offsets
+/// Positions an underwater action button using ButtonConfig offsets.
 ///
 /// Calculates absolute position from screen center with custom offsets,
 /// matching Swift app's ZStack with .offset() behavior
@@ -12,10 +12,13 @@ class PositionedButton extends StatelessWidget {
   final IconData? icon;
   final String? label; // Renamed from text for consistency
   final VoidCallback? onPressed; // Renamed from onTap for consistency
-  final VoidCallback? onLongPress;
-  final void Function(TapDownDetails)? onTapDown;
-  final void Function(TapUpDetails)? onTapUp;
-  final VoidCallback? onTapCancel;
+  final ButtonActionProfile actionProfile;
+  final Duration holdDuration;
+  final Duration repeatInitialDelay;
+  final Duration repeatInterval;
+  final ValueChanged<double>? onHoldProgress;
+  final VoidCallback? onHoldCancelled;
+  final ValueChanged<bool>? onInteractionStateChanged;
   final bool showProgress;
   final double progressValue;
 
@@ -26,10 +29,13 @@ class PositionedButton extends StatelessWidget {
     this.icon,
     this.label,
     this.onPressed,
-    this.onLongPress,
-    this.onTapDown,
-    this.onTapUp,
-    this.onTapCancel,
+    this.actionProfile = ButtonActionProfile.singleTap,
+    this.holdDuration = const Duration(seconds: 6),
+    this.repeatInitialDelay = const Duration(milliseconds: 500),
+    this.repeatInterval = const Duration(milliseconds: 120),
+    this.onHoldProgress,
+    this.onHoldCancelled,
+    this.onInteractionStateChanged,
     this.showProgress = false,
     this.progressValue = 0.0,
   });
@@ -46,16 +52,19 @@ class PositionedButton extends StatelessWidget {
     return Positioned(
       left: left,
       top: top,
-      child: CircularActionButton(
+      child: UnderwaterActionButton(
         size: config.size,
         color: color,
         icon: icon,
         text: label,
         onTap: onPressed,
-        onLongPress: onLongPress,
-        onTapDown: onTapDown,
-        onTapUp: onTapUp,
-        onTapCancel: onTapCancel,
+        actionProfile: actionProfile,
+        holdDuration: holdDuration,
+        repeatInitialDelay: repeatInitialDelay,
+        repeatInterval: repeatInterval,
+        onHoldProgress: onHoldProgress,
+        onHoldCancelled: onHoldCancelled,
+        onInteractionStateChanged: onInteractionStateChanged,
         showProgress: showProgress,
         progressValue: progressValue,
       ),

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'dart:async';
 import '../models/survey_data.dart';
 import '../services/storage_service.dart';
 import '../services/magnetometer_service.dart';
 import '../services/button_customization_service.dart';
+import '../widgets/underwater_action_button.dart';
 import '../widgets/positioned_button.dart';
 import '../widgets/info_card.dart';
 import '../widgets/monospaced_text.dart';
@@ -48,23 +48,6 @@ class _SaveDataScreenState extends State<SaveDataScreen> {
     _right = lastValues['right']!;
     _up = lastValues['up']!;
     _down = lastValues['down']!;
-  }
-
-  // Tap vs long-press detection
-  Timer? _incrementTimer;
-  Timer? _decrementTimer;
-  Timer? _incrementLongPressDetector;
-  Timer? _decrementLongPressDetector;
-  bool _isIncrementHolding = false;
-  bool _isDecrementHolding = false;
-
-  @override
-  void dispose() {
-    _incrementTimer?.cancel();
-    _decrementTimer?.cancel();
-    _incrementLongPressDetector?.cancel();
-    _decrementLongPressDetector?.cancel();
-    super.dispose();
   }
 
   void _cycleParameter() {
@@ -132,95 +115,6 @@ class _SaveDataScreenState extends State<SaveDataScreen> {
       default:
         return 0.0;
     }
-  }
-
-  // Start repeating increment for long-press
-  void _startIncrementTimer() {
-    _incrementTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
-      _increment(1.0);
-    });
-  }
-
-  // Start repeating decrement for long-press
-  void _startDecrementTimer() {
-    _decrementTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
-      _decrement(1.0);
-    });
-  }
-
-  // Stop increment timer
-  void _stopIncrementTimer() {
-    _incrementTimer?.cancel();
-    _incrementTimer = null;
-  }
-
-  // Stop decrement timer
-  void _stopDecrementTimer() {
-    _decrementTimer?.cancel();
-    _decrementTimer = null;
-  }
-
-  // Handle increment tap down (start of press)
-  void _onIncrementTapDown() {
-    _isIncrementHolding = false;
-    // Schedule long-press detection after 500ms
-    _incrementLongPressDetector = Timer(const Duration(milliseconds: 500), () {
-      if (mounted && !_isIncrementHolding) {
-        _isIncrementHolding = true;
-        _startIncrementTimer();
-      }
-    });
-  }
-
-  // Handle increment tap up (end of press)
-  void _onIncrementTapUp() {
-    _incrementLongPressDetector?.cancel();
-    _incrementLongPressDetector = null;
-
-    if (!_isIncrementHolding) {
-      // Was a tap, not a hold
-      _increment(1.0);
-    }
-    _stopIncrementTimer();
-    _isIncrementHolding = false;
-  }
-
-  // Handle decrement tap down
-  void _onDecrementTapDown() {
-    _isDecrementHolding = false;
-    _decrementLongPressDetector = Timer(const Duration(milliseconds: 500), () {
-      if (mounted && !_isDecrementHolding) {
-        _isDecrementHolding = true;
-        _startDecrementTimer();
-      }
-    });
-  }
-
-  // Handle decrement tap up
-  void _onDecrementTapUp() {
-    _decrementLongPressDetector?.cancel();
-    _decrementLongPressDetector = null;
-
-    if (!_isDecrementHolding) {
-      _decrement(1.0);
-    }
-    _stopDecrementTimer();
-    _isDecrementHolding = false;
-  }
-
-  // Handle tap cancel (finger moved off button)
-  void _onIncrementTapCancel() {
-    _incrementLongPressDetector?.cancel();
-    _incrementLongPressDetector = null;
-    _stopIncrementTimer();
-    _isIncrementHolding = false;
-  }
-
-  void _onDecrementTapCancel() {
-    _decrementLongPressDetector?.cancel();
-    _decrementLongPressDetector = null;
-    _stopDecrementTimer();
-    _isDecrementHolding = false;
   }
 
   Future<void> _saveManualPoint() async {
@@ -349,12 +243,13 @@ class _SaveDataScreenState extends State<SaveDataScreen> {
                 ),
               ),
 
-              // Circular action buttons positioned via ButtonConfig
+              // Underwater action buttons positioned via ButtonConfig
               PositionedButton(
                 config: buttonService.saveDataDecrementButton,
-                onTapDown: (_) => _onDecrementTapDown(),
-                onTapUp: (_) => _onDecrementTapUp(),
-                onTapCancel: _onDecrementTapCancel,
+                onPressed: () => _decrement(1.0),
+                actionProfile: ButtonActionProfile.pressAndRepeat,
+                repeatInitialDelay: const Duration(milliseconds: 500),
+                repeatInterval: const Duration(milliseconds: 100),
                 icon: Icons.remove,
                 color: AppColors.actionDecrement,
               ),
@@ -368,9 +263,10 @@ class _SaveDataScreenState extends State<SaveDataScreen> {
 
               PositionedButton(
                 config: buttonService.saveDataIncrementButton,
-                onTapDown: (_) => _onIncrementTapDown(),
-                onTapUp: (_) => _onIncrementTapUp(),
-                onTapCancel: _onIncrementTapCancel,
+                onPressed: () => _increment(1.0),
+                actionProfile: ButtonActionProfile.pressAndRepeat,
+                repeatInitialDelay: const Duration(milliseconds: 500),
+                repeatInterval: const Duration(milliseconds: 100),
                 icon: Icons.add,
                 color: AppColors.actionIncrement,
               ),

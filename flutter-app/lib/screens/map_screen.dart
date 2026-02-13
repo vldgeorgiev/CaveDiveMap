@@ -8,10 +8,7 @@ import '../utils/theme_extensions.dart';
 import 'dart:math' as math;
 
 /// Map view mode (Plan or Elevation)
-enum MapViewMode {
-  plan,
-  elevation,
-}
+enum MapViewMode { plan, elevation }
 
 /// Map visualization screen with 2D cave survey rendering
 class MapScreen extends StatefulWidget {
@@ -39,11 +36,13 @@ class _MapScreenState extends State<MapScreen> {
   MapViewMode _viewMode = MapViewMode.plan;
   bool _isFirstLoadPlan = true;
   bool _isFirstLoadElevation = true;
+  bool _isOverlayInteractionActive = false;
 
   late Future<List<SurveyData>> _surveyFuture;
 
   // Getters for current view's state
-  double get _scale => _viewMode == MapViewMode.plan ? _planScale : _elevationScale;
+  double get _scale =>
+      _viewMode == MapViewMode.plan ? _planScale : _elevationScale;
   set _scale(double value) {
     if (_viewMode == MapViewMode.plan) {
       _planScale = value;
@@ -52,7 +51,8 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  Offset get _offset => _viewMode == MapViewMode.plan ? _planOffset : _elevationOffset;
+  Offset get _offset =>
+      _viewMode == MapViewMode.plan ? _planOffset : _elevationOffset;
   set _offset(Offset value) {
     if (_viewMode == MapViewMode.plan) {
       _planOffset = value;
@@ -151,11 +151,13 @@ class _MapScreenState extends State<MapScreen> {
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onScaleStart: (details) {
+                    if (_isOverlayInteractionActive) return;
                     _lastFocalPoint = details.focalPoint;
                     _baseScale = _scale;
                     _baseRotation = _rotation;
                   },
                   onScaleUpdate: (details) {
+                    if (_isOverlayInteractionActive) return;
                     setState(() {
                       // Zoom - update scale first
                       _scale = (_baseScale * details.scale).clamp(1.0, 100.0);
@@ -184,6 +186,7 @@ class _MapScreenState extends State<MapScreen> {
                     });
                   },
                   child: CustomPaint(
+                    key: const Key('map_canvas'),
                     painter: CaveMapPainter(
                       surveyData: manualPoints,
                       scale: _scale,
@@ -196,22 +199,14 @@ class _MapScreenState extends State<MapScreen> {
               ),
 
               // View mode toggle (top layer)
-              Positioned(
-                top: 16,
-                left: 16,
-                child: _buildViewModeToggle(),
-              ),
+              Positioned(top: 16, left: 16, child: _buildViewModeToggle()),
 
               // Scale indicator
               Positioned(bottom: 16, left: 16, child: _buildScaleIndicator()),
 
               // North arrow indicator (plan view only)
               if (_viewMode == MapViewMode.plan)
-                Positioned(
-                  top: 16,
-                  right: 16,
-                  child: _buildNorthArrow(),
-                ),
+                Positioned(top: 16, right: 16, child: _buildNorthArrow()),
 
               // Stats overlay
               Positioned(
@@ -248,21 +243,32 @@ class _MapScreenState extends State<MapScreen> {
           _buildToggleButton(
             'Plan',
             MapViewMode.plan,
-            Icons.map,
+            const Key('map_toggle_plan'),
           ),
           _buildToggleButton(
             'Elevation',
             MapViewMode.elevation,
-            Icons.show_chart,
+            const Key('map_toggle_elevation'),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildToggleButton(String label, MapViewMode mode, IconData icon) {
+  void _setOverlayInteractionActive(bool active) {
+    if (_isOverlayInteractionActive == active || !mounted) return;
+    setState(() {
+      _isOverlayInteractionActive = active;
+    });
+  }
+
+  Widget _buildToggleButton(String label, MapViewMode mode, Key key) {
     final isSelected = _viewMode == mode;
     return GestureDetector(
+      key: key,
+      onTapDown: (_) => _setOverlayInteractionActive(true),
+      onTapUp: (_) => _setOverlayInteractionActive(false),
+      onTapCancel: () => _setOverlayInteractionActive(false),
       onTap: () {
         setState(() {
           _viewMode = mode;
@@ -277,7 +283,7 @@ class _MapScreenState extends State<MapScreen> {
         child: Row(
           children: [
             Icon(
-              icon,
+              mode == MapViewMode.plan ? Icons.map : Icons.show_chart,
               color: isSelected ? Colors.cyan : Colors.grey,
               size: 18,
             ),
@@ -332,11 +338,10 @@ class _MapScreenState extends State<MapScreen> {
       final padding = 0.2; // 20% margin for better visibility
       final scaleX = size.width / (bounds.width * (1 + padding * 2));
       final scaleY = size.height / (bounds.height * (1 + padding * 2));
-      final calculatedScale = math.min(scaleX, scaleY).clamp(1.0, double.infinity);
-      final calculatedOffset = Offset(
-        -bounds.center.dx,
-        -bounds.center.dy,
-      );
+      final calculatedScale = math
+          .min(scaleX, scaleY)
+          .clamp(1.0, double.infinity);
+      final calculatedOffset = Offset(-bounds.center.dx, -bounds.center.dy);
 
       if (_viewMode == MapViewMode.plan) {
         _planRotation = 0.0;
@@ -363,7 +368,8 @@ class _MapScreenState extends State<MapScreen> {
       double x = 0, y = 0;
       for (int i = 0; i < manualPoints.length; i++) {
         if (i > 0) {
-          final deltaDistance = manualPoints[i].distance - manualPoints[i - 1].distance;
+          final deltaDistance =
+              manualPoints[i].distance - manualPoints[i - 1].distance;
           // Use heading from previous point (matches painter logic)
           final headingRad = manualPoints[i - 1].heading * math.pi / 180;
           // North is up (negative Y), East is right (positive X) - matches painter
@@ -473,9 +479,7 @@ class _MapScreenState extends State<MapScreen> {
       ),
       child: Transform.rotate(
         angle: _planRotation,
-        child: CustomPaint(
-          painter: NorthArrowPainter(),
-        ),
+        child: CustomPaint(painter: NorthArrowPainter()),
       ),
     );
   }
@@ -484,9 +488,12 @@ class _MapScreenState extends State<MapScreen> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // CSV Export (Purple)
         GestureDetector(
-          onTap: () => _exportCSV(),
+          key: const Key('map_export_csv'),
+          onTapDown: (_) => _setOverlayInteractionActive(true),
+          onTapUp: (_) => _setOverlayInteractionActive(false),
+          onTapCancel: () => _setOverlayInteractionActive(false),
+          onTap: _exportCSV,
           child: Container(
             width: 56,
             height: 56,
@@ -514,9 +521,12 @@ class _MapScreenState extends State<MapScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        // Therion Export (Gray)
         GestureDetector(
-          onTap: () => _exportTherion(),
+          key: const Key('map_export_th'),
+          onTapDown: (_) => _setOverlayInteractionActive(true),
+          onTapUp: (_) => _setOverlayInteractionActive(false),
+          onTapCancel: () => _setOverlayInteractionActive(false),
+          onTap: _exportTherion,
           child: Container(
             width: 56,
             height: 56,
@@ -637,10 +647,7 @@ class _MapScreenState extends State<MapScreen> {
           '${settings.surveyName}_'
           '${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')}_'
           '${timestamp.hour.toString().padLeft(2, '0')}-${timestamp.minute.toString().padLeft(2, '0')}-${timestamp.second.toString().padLeft(2, '0')}';
-      final file = await exportService.exportToTherion(
-        surveyData,
-        surveyName,
-      );
+      final file = await exportService.exportToTherion(surveyData, surveyName);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -683,7 +690,10 @@ class _MapScreenState extends State<MapScreen> {
     return '$start/.../$filename';
   }
 
-  Widget _buildStatsOverlay(List<SurveyData> allData, List<SurveyData> manualPoints) {
+  Widget _buildStatsOverlay(
+    List<SurveyData> allData,
+    List<SurveyData> manualPoints,
+  ) {
     final totalPoints = allData.length;
     final manualCount = manualPoints.length;
     final totalDistance = allData.isEmpty ? 0.0 : allData.last.distance;
@@ -815,7 +825,8 @@ class CaveMapPainter extends CustomPainter {
 
     for (int i = 0; i < surveyData.length; i++) {
       if (i > 0) {
-        final deltaDistance = surveyData[i].distance - surveyData[i - 1].distance;
+        final deltaDistance =
+            surveyData[i].distance - surveyData[i - 1].distance;
         // Use heading from point i-1 (the starting point of this leg)
         final headingRad = surveyData[i - 1].heading * math.pi / 180;
 
@@ -868,27 +879,23 @@ class CaveMapPainter extends CustomPainter {
     final centerX = -offset.dx;
     final centerY = -offset.dy;
 
-    final startX = ((centerX - halfWidth - margin) / gridSpacing).floor() * gridSpacing;
-    final endX = ((centerX + halfWidth + margin) / gridSpacing).ceil() * gridSpacing;
-    final startY = ((centerY - halfHeight - margin) / gridSpacing).floor() * gridSpacing;
-    final endY = ((centerY + halfHeight + margin) / gridSpacing).ceil() * gridSpacing;
+    final startX =
+        ((centerX - halfWidth - margin) / gridSpacing).floor() * gridSpacing;
+    final endX =
+        ((centerX + halfWidth + margin) / gridSpacing).ceil() * gridSpacing;
+    final startY =
+        ((centerY - halfHeight - margin) / gridSpacing).floor() * gridSpacing;
+    final endY =
+        ((centerY + halfHeight + margin) / gridSpacing).ceil() * gridSpacing;
 
     // Vertical lines - draw in world space
     for (double x = startX; x <= endX; x += gridSpacing) {
-      canvas.drawLine(
-        Offset(x, startY),
-        Offset(x, endY),
-        gridPaint,
-      );
+      canvas.drawLine(Offset(x, startY), Offset(x, endY), gridPaint);
     }
 
     // Horizontal lines
     for (double y = startY; y <= endY; y += gridSpacing) {
-      canvas.drawLine(
-        Offset(startX, y),
-        Offset(endX, y),
-        gridPaint,
-      );
+      canvas.drawLine(Offset(startX, y), Offset(endX, y), gridPaint);
     }
   }
 
@@ -1124,10 +1131,7 @@ class NorthArrowPainter extends CustomPainter {
     textPainter.layout();
     textPainter.paint(
       canvas,
-      Offset(
-        center.dx - textPainter.width / 2,
-        center.dy + arrowLength * 0.5,
-      ),
+      Offset(center.dx - textPainter.width / 2, center.dy + arrowLength * 0.5),
     );
   }
 

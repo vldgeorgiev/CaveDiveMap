@@ -1,11 +1,24 @@
 import 'package:flutter/foundation.dart';
 import '../models/button_config.dart';
 import 'storage_service.dart';
+import '../utils/underwater_button_layout.dart';
 
 /// Service managing button customization settings
 /// Provides reactive access to button configurations with persistence
 class ButtonCustomizationService extends ChangeNotifier {
   final StorageService _storage;
+  static const List<String> _mainGroupOrder = <String>[
+    'main_save',
+    'main_map',
+    'main_reset',
+    'main_camera',
+  ];
+  static const List<String> _saveDataGroupOrder = <String>[
+    'save_data_save',
+    'save_data_increment',
+    'save_data_decrement',
+    'save_data_cycle',
+  ];
 
   // Main Screen button configs
   ButtonConfig _mainSaveButton = ButtonConfig.defaultMainSave();
@@ -74,6 +87,7 @@ class ButtonCustomizationService extends ChangeNotifier {
 
     // Migrate old button positions to new defaults if they match old values
     await _migrateOldPositions();
+    await _sanitizeAllGroups();
 
     _isLoaded = true;
     notifyListeners();
@@ -114,57 +128,49 @@ class ButtonCustomizationService extends ChangeNotifier {
 
   /// Update main screen save button configuration
   Future<void> updateMainSaveButton(ButtonConfig config) async {
-    _mainSaveButton = config;
-    await _storage.saveButtonConfig('main_save', config);
+    await _sanitizeMainGroup(overrides: {'main_save': config});
     notifyListeners();
   }
 
   /// Update main screen map button configuration
   Future<void> updateMainMapButton(ButtonConfig config) async {
-    _mainMapButton = config;
-    await _storage.saveButtonConfig('main_map', config);
+    await _sanitizeMainGroup(overrides: {'main_map': config});
     notifyListeners();
   }
 
   /// Update main screen reset button configuration
   Future<void> updateMainResetButton(ButtonConfig config) async {
-    _mainResetButton = config;
-    await _storage.saveButtonConfig('main_reset', config);
+    await _sanitizeMainGroup(overrides: {'main_reset': config});
     notifyListeners();
   }
 
   /// Update main screen camera button configuration
   Future<void> updateMainCameraButton(ButtonConfig config) async {
-    _mainCameraButton = config;
-    await _storage.saveButtonConfig('main_camera', config);
+    await _sanitizeMainGroup(overrides: {'main_camera': config});
     notifyListeners();
   }
 
   /// Update save data view save button configuration
   Future<void> updateSaveDataSaveButton(ButtonConfig config) async {
-    _saveDataSaveButton = config;
-    await _storage.saveButtonConfig('save_data_save', config);
+    await _sanitizeSaveDataGroup(overrides: {'save_data_save': config});
     notifyListeners();
   }
 
   /// Update save data view increment button configuration
   Future<void> updateSaveDataIncrementButton(ButtonConfig config) async {
-    _saveDataIncrementButton = config;
-    await _storage.saveButtonConfig('save_data_increment', config);
+    await _sanitizeSaveDataGroup(overrides: {'save_data_increment': config});
     notifyListeners();
   }
 
   /// Update save data view decrement button configuration
   Future<void> updateSaveDataDecrementButton(ButtonConfig config) async {
-    _saveDataDecrementButton = config;
-    await _storage.saveButtonConfig('save_data_decrement', config);
+    await _sanitizeSaveDataGroup(overrides: {'save_data_decrement': config});
     notifyListeners();
   }
 
   /// Update save data view cycle button configuration
   Future<void> updateSaveDataCycleButton(ButtonConfig config) async {
-    _saveDataCycleButton = config;
-    await _storage.saveButtonConfig('save_data_cycle', config);
+    await _sanitizeSaveDataGroup(overrides: {'save_data_cycle': config});
     notifyListeners();
   }
 
@@ -199,6 +205,8 @@ class ButtonCustomizationService extends ChangeNotifier {
       ),
       _storage.saveButtonConfig('save_data_cycle', _saveDataCycleButton),
     ]);
+
+    await _sanitizeAllGroups();
 
     notifyListeners();
   }
@@ -254,6 +262,97 @@ class ButtonCustomizationService extends ChangeNotifier {
       case 'save_data_cycle':
         await updateSaveDataCycleButton(config);
         break;
+    }
+  }
+
+  Future<void> _sanitizeAllGroups() async {
+    await _sanitizeMainGroup();
+    await _sanitizeSaveDataGroup();
+  }
+
+  Future<void> _sanitizeMainGroup({
+    Map<String, ButtonConfig> overrides = const <String, ButtonConfig>{},
+  }) async {
+    final sanitized = UnderwaterButtonLayout.sanitizeGroup({
+      'main_save': overrides['main_save'] ?? _mainSaveButton,
+      'main_map': overrides['main_map'] ?? _mainMapButton,
+      'main_reset': overrides['main_reset'] ?? _mainResetButton,
+      'main_camera': overrides['main_camera'] ?? _mainCameraButton,
+    }, priorityOrder: _mainGroupOrder);
+
+    await _applyMainGroup(sanitized);
+  }
+
+  Future<void> _sanitizeSaveDataGroup({
+    Map<String, ButtonConfig> overrides = const <String, ButtonConfig>{},
+  }) async {
+    final sanitized = UnderwaterButtonLayout.sanitizeGroup({
+      'save_data_save': overrides['save_data_save'] ?? _saveDataSaveButton,
+      'save_data_increment':
+          overrides['save_data_increment'] ?? _saveDataIncrementButton,
+      'save_data_decrement':
+          overrides['save_data_decrement'] ?? _saveDataDecrementButton,
+      'save_data_cycle': overrides['save_data_cycle'] ?? _saveDataCycleButton,
+    }, priorityOrder: _saveDataGroupOrder);
+
+    await _applySaveDataGroup(sanitized);
+  }
+
+  Future<void> _applyMainGroup(Map<String, ButtonConfig> sanitized) async {
+    final nextMainSave = sanitized['main_save']!;
+    if (nextMainSave != _mainSaveButton) {
+      _mainSaveButton = nextMainSave;
+      await _storage.saveButtonConfig('main_save', _mainSaveButton);
+    }
+
+    final nextMainMap = sanitized['main_map']!;
+    if (nextMainMap != _mainMapButton) {
+      _mainMapButton = nextMainMap;
+      await _storage.saveButtonConfig('main_map', _mainMapButton);
+    }
+
+    final nextMainReset = sanitized['main_reset']!;
+    if (nextMainReset != _mainResetButton) {
+      _mainResetButton = nextMainReset;
+      await _storage.saveButtonConfig('main_reset', _mainResetButton);
+    }
+
+    final nextMainCamera = sanitized['main_camera']!;
+    if (nextMainCamera != _mainCameraButton) {
+      _mainCameraButton = nextMainCamera;
+      await _storage.saveButtonConfig('main_camera', _mainCameraButton);
+    }
+  }
+
+  Future<void> _applySaveDataGroup(Map<String, ButtonConfig> sanitized) async {
+    final nextSaveDataSave = sanitized['save_data_save']!;
+    if (nextSaveDataSave != _saveDataSaveButton) {
+      _saveDataSaveButton = nextSaveDataSave;
+      await _storage.saveButtonConfig('save_data_save', _saveDataSaveButton);
+    }
+
+    final nextSaveDataIncrement = sanitized['save_data_increment']!;
+    if (nextSaveDataIncrement != _saveDataIncrementButton) {
+      _saveDataIncrementButton = nextSaveDataIncrement;
+      await _storage.saveButtonConfig(
+        'save_data_increment',
+        _saveDataIncrementButton,
+      );
+    }
+
+    final nextSaveDataDecrement = sanitized['save_data_decrement']!;
+    if (nextSaveDataDecrement != _saveDataDecrementButton) {
+      _saveDataDecrementButton = nextSaveDataDecrement;
+      await _storage.saveButtonConfig(
+        'save_data_decrement',
+        _saveDataDecrementButton,
+      );
+    }
+
+    final nextSaveDataCycle = sanitized['save_data_cycle']!;
+    if (nextSaveDataCycle != _saveDataCycleButton) {
+      _saveDataCycleButton = nextSaveDataCycle;
+      await _storage.saveButtonConfig('save_data_cycle', _saveDataCycleButton);
     }
   }
 }
