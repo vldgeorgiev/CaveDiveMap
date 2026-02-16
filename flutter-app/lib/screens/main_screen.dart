@@ -355,14 +355,6 @@ class _MainScreenState extends State<MainScreen>
                         progressValue: _resetHoldProgress,
                       ),
 
-                      PositionedButton(
-                        config: buttonService.mainCameraButton,
-                        onPressed: _showCameraNotImplemented,
-                        icon: Icons.camera_alt,
-                        label: 'Photo',
-                        color: AppColors.actionSecondary,
-                      ),
-
                       // Calibration toast overlay
                       if (_showCalibrationToast)
                         CalibrationToast(
