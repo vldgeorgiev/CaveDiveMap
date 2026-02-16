@@ -31,6 +31,9 @@ class _MainScreenState extends State<MainScreen>
   bool _isResetting = false;
   bool _isHoldingReset = false;
   double _resetHoldProgress = 0.0;
+  MagnetometerService? _magnetometerService;
+  CompassService? _compassService;
+  VoidCallback? _compassListener;
 
   @override
   void initState() {
@@ -42,6 +45,8 @@ class _MainScreenState extends State<MainScreen>
       final magnetometerService = context.read<MagnetometerService>();
       final compassService = context.read<CompassService>();
       final settings = context.read<Settings>();
+      _magnetometerService = magnetometerService;
+      _compassService = compassService;
 
       // Sync algorithm selection from settings
       magnetometerService.setAlgorithm(settings.rotationAlgorithm);
@@ -53,17 +58,21 @@ class _MainScreenState extends State<MainScreen>
       compassService.startListening();
 
       // Update magnetometer heading whenever compass changes
-      compassService.addListener(() {
-        magnetometerService.updateHeading(compassService.heading);
-      });
+      _compassListener = () {
+        _magnetometerService?.updateHeading(compassService.heading);
+      };
+      compassService.addListener(_compassListener!);
     });
   }
 
   @override
   void dispose() {
     // Stop sensors when leaving screen
-    context.read<MagnetometerService>().stopListening();
-    context.read<CompassService>().stopListening();
+    if (_compassListener != null && _compassService != null) {
+      _compassService!.removeListener(_compassListener!);
+    }
+    _magnetometerService?.stopListening();
+    _compassService?.stopListening();
     super.dispose();
   }
 
@@ -149,7 +158,7 @@ class _MainScreenState extends State<MainScreen>
     if (!_isResetting && didPartiallyHold && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Hold for 6 seconds to reset'),
+          content: Text('Hold for 5 seconds to reset'),
           duration: Duration(seconds: 1),
         ),
       );
@@ -166,6 +175,8 @@ class _MainScreenState extends State<MainScreen>
     final storageService = context.read<StorageService>();
     final exportService = context.read<ExportService>();
     final magnetometerService = context.read<MagnetometerService>();
+    final compassService = context.read<CompassService>();
+    final wasRecording = magnetometerService.isRecording;
 
     // Get current survey data
     final surveyData = await storageService.getAllSurveyData();
@@ -200,6 +211,12 @@ class _MainScreenState extends State<MainScreen>
     // Clear all data
     await storageService.clearAllData();
     magnetometerService.reset();
+    if (wasRecording) {
+      magnetometerService.startRecording(
+        initialDepth: magnetometerService.currentDepth,
+        initialHeading: compassService.heading,
+      );
+    }
 
     if (mounted) {
       final message = exportedPath != null
@@ -217,16 +234,13 @@ class _MainScreenState extends State<MainScreen>
       );
     }
 
-    _isResetting = false;
-  }
-
-  void _showCameraNotImplemented() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Camera feature not yet implemented'),
-        duration: Duration(seconds: 2),
-      ),
-    );
+    if (mounted) {
+      setState(() {
+        _isResetting = false;
+      });
+    } else {
+      _isResetting = false;
+    }
   }
 
   @override
@@ -345,7 +359,7 @@ class _MainScreenState extends State<MainScreen>
                         config: buttonService.mainResetButton,
                         onPressed: _performReset,
                         actionProfile: ButtonActionProfile.holdToConfirm,
-                        holdDuration: const Duration(seconds: 6),
+                        holdDuration: const Duration(seconds: 5),
                         onHoldProgress: _onResetHoldProgress,
                         onHoldCancelled: _onResetHoldCancelled,
                         icon: Icons.refresh,
