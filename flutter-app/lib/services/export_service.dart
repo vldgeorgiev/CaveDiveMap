@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
@@ -38,53 +37,82 @@ class ExportService {
     return _writeFile(fileName, buffer.toString());
   }
 
-  /// Export survey data to Therion format
+  /// Export survey data to Therion diving format
   Future<File> exportToTherion(
     List<SurveyData> surveyPoints,
     String surveyName,
   ) async {
+    return _writeFile('$surveyName.th', buildTherionContent(surveyPoints, surveyName));
+  }
+
+  /// Build the Therion .th file content as a string.
+  ///
+  /// Exposed for testing; use [exportToTherion] for normal export.
+  String buildTherionContent(List<SurveyData> surveyPoints, String surveyName) {
     final buffer = StringBuffer();
 
-    // Therion header
+    // Skip auto-collected intermediate points; only survey stations are exported.
+    final stations = surveyPoints.where((p) => p.rtype != 'auto').toList();
+
+    // Derive survey date from the first station's timestamp.
+    String surveyDate = '';
+    if (stations.isNotEmpty) {
+      final ts = stations.first.timestamp;
+      surveyDate =
+          '${ts.year}.${ts.month.toString().padLeft(2, '0')}.${ts.day.toString().padLeft(2, '0')}';
+    }
+
+    // File header
+    buffer.writeln('encoding  utf-8');
+    buffer.writeln('');
     buffer.writeln('survey $surveyName -title "$surveyName"');
     buffer.writeln('');
     buffer.writeln('  centerline');
-    buffer.writeln('    units length meters');
-    buffer.writeln('    units compass degrees');
-    buffer.writeln('    data normal from to length compass clino');
+    buffer.writeln('    date $surveyDate');
     buffer.writeln('');
+    buffer.writeln('    walls on');
+    buffer.writeln('    units length depth meters');
+    buffer.writeln('    units compass degrees');
+    buffer.writeln('');
+    buffer.writeln('    # Converted from $surveyName.csv');
+    buffer.writeln(
+      '    # CSV columns: cumulative distance, heading (forward compass), absolute depth',
+    );
+    buffer.writeln(
+      '    # Leg lengths = difference of consecutive cumulative distances',
+    );
+    buffer.writeln('    data diving from to length compass fromdepth todepth');
 
-    // Generate Therion survey data
-    for (int i = 0; i < surveyPoints.length - 1; i++) {
-      final from = surveyPoints[i];
-      final to = surveyPoints[i + 1];
+    for (int i = 0; i < stations.length - 1; i++) {
+      final from = stations[i];
+      final to = stations[i + 1];
 
       final legLength = to.distance - from.distance;
-      final compass = to.heading;
-
-      final depthChange = to.depth - from.depth;
-      double clino = 0.0;
-      if (legLength > 0.001) {
-        clino = _radiansToDegrees(_calculateClino(depthChange, legLength));
-      }
+      // Compass is the forward bearing recorded AT the from-station (looking
+      // toward the to-station). This matches the map-screen convention which
+      // uses manualPoints[i-1].heading (the from-point heading) to plot legs.
+      final compass = from.heading;
+      final fromDepth = from.depth;
+      final toDepth = to.depth;
 
       buffer.writeln(
-        '    ${from.recordNumber} ${to.recordNumber} '
-        '${legLength.toStringAsFixed(2)} '
-        '${compass.toStringAsFixed(1)} '
-        '${clino.toStringAsFixed(1)}',
+        '    ${i.toString().padLeft(3)}  ${(i + 1).toString().padLeft(2)}'
+        '  ${legLength.toStringAsFixed(2).padLeft(7)}'
+        '  ${compass.toStringAsFixed(2).padLeft(7)}'
+        '  ${fromDepth.toStringAsFixed(1).padLeft(5)}'
+        '  ${toDepth.toStringAsFixed(1)}',
       );
     }
-
     buffer.writeln('  endcenterline');
     buffer.writeln('');
 
     buffer.writeln('  centerline');
     buffer.writeln('    data dimensions station left right up down');
-    for (final point in surveyPoints) {
+    for (int i = 0; i < stations.length; i++) {
+      final point = stations[i];
       if (point.rtype == 'manual') {
         buffer.writeln(
-          '    ${point.recordNumber} '
+          '    $i '
           '${point.left.toStringAsFixed(2)} '
           '${point.right.toStringAsFixed(2)} '
           '${point.up.toStringAsFixed(2)} '
@@ -96,15 +124,7 @@ class ExportService {
     buffer.writeln('');
     buffer.writeln('endsurvey');
 
-    return _writeFile('$surveyName.th', buffer.toString());
-  }
-
-  static double _calculateClino(double depthChange, double horizontalDistance) {
-    return -1 * atan(depthChange / horizontalDistance);
-  }
-
-  static double _radiansToDegrees(double radians) {
-    return radians * 180.0 / pi;
+    return buffer.toString();
   }
 
   /// Writes content to a file in a platform-specific accessible location.
