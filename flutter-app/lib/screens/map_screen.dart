@@ -383,14 +383,18 @@ class _MapScreenState extends State<MapScreen> {
         final headingRad = manualPoints[i].heading * math.pi / 180;
         final perpRad = headingRad + math.pi / 2;
 
-        // Calculate perpendicular offset for left and right
-        final perpDx = math.cos(perpRad);
-        final perpDy = -math.sin(perpRad); // Negative because Y is inverted
+        // Right perpendicular in screen coords: (sin(perpRad), -cos(perpRad))
+        // Left wall point (opposite direction): center - right_perp * left
+        // Right wall point: center + right_perp * right
+        final lx = x - math.sin(perpRad) * left;
+        final ly = y + math.cos(perpRad) * left;
+        final rx = x + math.sin(perpRad) * right;
+        final ry = y - math.cos(perpRad) * right;
 
-        minX = math.min(minX, math.min(x - left * perpDx, x + right * perpDx));
-        maxX = math.max(maxX, math.max(x - left * perpDx, x + right * perpDx));
-        minY = math.min(minY, math.min(y - left * perpDy, y + right * perpDy));
-        maxY = math.max(maxY, math.max(y - left * perpDy, y + right * perpDy));
+        minX = math.min(minX, math.min(lx, rx));
+        maxX = math.max(maxX, math.max(lx, rx));
+        minY = math.min(minY, math.min(ly, ry));
+        maxY = math.max(maxY, math.max(ly, ry));
       }
 
       return Rect.fromLTRB(minX, minY, maxX, maxY);
@@ -936,13 +940,15 @@ class CaveMapPainter extends CustomPainter {
         final perpRad = headingRad + math.pi / 2; // Perpendicular to heading
 
         // Calculate left and right wall endpoints (in meters)
+        // Right perpendicular in screen coords: (sin(perpRad), -cos(perpRad))
+        // Left is the negation of that
         final leftOffset = Offset(
-          math.sin(perpRad) * surveyPoint.left,
-          -math.cos(perpRad) * surveyPoint.left,
+          -math.sin(perpRad) * surveyPoint.left,
+          math.cos(perpRad) * surveyPoint.left,
         );
         final rightOffset = Offset(
-          -math.sin(perpRad) * surveyPoint.right,
-          math.cos(perpRad) * surveyPoint.right,
+          math.sin(perpRad) * surveyPoint.right,
+          -math.cos(perpRad) * surveyPoint.right,
         );
 
         // Draw wall endpoints
