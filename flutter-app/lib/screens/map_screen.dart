@@ -473,17 +473,26 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Widget _buildNorthArrow() {
-    return Container(
-      width: 60,
-      height: 60,
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.7),
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.cyan, width: 2),
-      ),
-      child: Transform.rotate(
-        angle: _planRotation,
-        child: CustomPaint(painter: NorthArrowPainter()),
+    final isNorthUp = _planRotation == 0.0;
+    return GestureDetector(
+      onTap: isNorthUp
+          ? null
+          : () => setState(() => _planRotation = 0.0),
+      child: Container(
+        width: 60,
+        height: 60,
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.7),
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: isNorthUp ? Colors.cyan : Colors.orange,
+            width: 2,
+          ),
+        ),
+        child: Transform.rotate(
+          angle: _planRotation,
+          child: CustomPaint(painter: NorthArrowPainter()),
+        ),
       ),
     );
   }
