@@ -65,7 +65,7 @@ class ExportService {
     // File header
     buffer.writeln('encoding  utf-8');
     buffer.writeln('');
-    buffer.writeln('survey $surveyName -title "$surveyName"');
+    buffer.writeln('survey $surveyName');
     buffer.writeln('');
     buffer.writeln('  centerline');
     buffer.writeln('    date $surveyDate');
@@ -103,10 +103,8 @@ class ExportService {
         '  ${toDepth.toStringAsFixed(1)}',
       );
     }
-    buffer.writeln('  endcenterline');
-    buffer.writeln('');
 
-    buffer.writeln('  centerline');
+    buffer.writeln('');
     buffer.writeln('    data dimensions station left right up down');
     for (int i = 0; i < stations.length; i++) {
       final point = stations[i];
