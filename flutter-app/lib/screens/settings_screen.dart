@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'dart:io';
 import '../models/settings.dart';
+import '../models/station.dart';
 import '../services/storage_service.dart';
 import '../services/export_service.dart';
 import '../services/magnetometer_service.dart';
@@ -126,9 +127,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final exportService = context.read<ExportService>();
     final settings = context.read<Settings>();
 
-    final allData = await storageService.getAllSurveyData();
+    final stations = storageService.stations;
+    final surveyLegs = storageService.legs;
 
-    if (allData.isEmpty) {
+    if (stations.isEmpty) {
       _showError('No survey data to export');
       return;
     }
@@ -142,9 +144,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       File file;
       if (format == 'csv') {
-        file = await exportService.exportToCSV(allData, '$timeString.csv');
+        file = await exportService.exportToCSV(stations, surveyLegs, '$timeString.csv');
       } else {
-        file = await exportService.exportToTherion(allData, timeString);
+        file = await exportService.exportToTherion(stations, surveyLegs, timeString);
       }
 
       if (mounted) {
@@ -171,82 +173,86 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _importData() async {
-    final exportService = context.read<ExportService>();
     final storageService = context.read<StorageService>();
+    final exportService = context.read<ExportService>();
 
-    // Check if data already exists
-    final existingData = await storageService.getAllSurveyData();
-    if (existingData.isNotEmpty) {
+    if (storageService.stations.isNotEmpty) {
       _showError('Cannot import: existing survey data found.\n\nPlease reset survey data before importing.');
       return;
     }
 
     try {
-      // Import CSV data
-      final importedData = await exportService.importFromCSV();
+      final data = await exportService.importFromCSV();
 
-      if (importedData.isEmpty) {
-        _showError('No data found in CSV file');
-        return;
+      if (!mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: AppColors.backgroundSecondary,
+          title: Text('Import Survey Data',
+              style: AppTextStyles.body.copyWith(
+                  color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
+          content: Text(
+            'Found ${data.stations.length} stations and ${data.legs.length} legs.\n\nContinue with import?',
+            style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text('Cancel',
+                  style: AppTextStyles.body.copyWith(color: AppColors.textSecondary)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.actionSave),
+              child: Text('Import',
+                  style: AppTextStyles.body.copyWith(color: AppColors.textPrimary)),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed != true) return;
+
+      // Import stations (they get new IDs from the database)
+      final idMap = <int, int>{}; // station number → new db id
+      for (final station in data.stations) {
+        final newId = await storageService.addStation(station);
+        idMap[station.number] = newId;
       }
 
-      // Show confirmation dialog
-      if (mounted) {
-        final confirmed = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            backgroundColor: AppColors.backgroundSecondary,
-            title: Text(
-              'Import Survey Data',
-              style: AppTextStyles.body.copyWith(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            content: Text(
-              'Found ${importedData.length} survey points.\n\n'
-              'Continue with import?',
-              style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: Text(
-                  'Cancel',
-                  style: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
-                ),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.actionSave,
-                ),
-                child: Text(
-                  'Import',
-                  style: AppTextStyles.body.copyWith(color: AppColors.textPrimary),
-                ),
-              ),
-            ],
-          ),
-        );
-
-        if (confirmed != true) {
-          return;
+      // Import legs, mapping station numbers to new db IDs
+      for (final leg in data.legs) {
+        final fromId = idMap[leg.fromStationId];
+        final toId = idMap[leg.toStationId];
+        if (fromId != null && toId != null) {
+          await storageService.addSurveyLeg(SurveyLeg(
+            fromStationId: fromId,
+            toStationId: toId,
+            distance: leg.distance,
+            heading: leg.heading,
+            left: leg.left,
+            right: leg.right,
+            up: leg.up,
+            down: leg.down,
+            timestamp: leg.timestamp,
+          ));
         }
       }
 
-      // Save imported data
-      for (final point in importedData) {
-        await storageService.saveSurveyPoint(point);
+      // Set departure to last station
+      if (data.stations.isNotEmpty) {
+        final lastNum = data.stations.last.number;
+        final lastId = idMap[lastNum];
+        if (lastId != null) {
+          await storageService.setCurrentDepartureStationId(lastId);
+        }
       }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'Successfully imported ${importedData.length} survey points',
-              style: AppTextStyles.body.copyWith(color: Colors.white),
-            ),
+            content: Text('Imported ${data.stations.length} stations and ${data.legs.length} legs'),
             backgroundColor: AppColors.actionSave,
             duration: const Duration(seconds: 3),
           ),

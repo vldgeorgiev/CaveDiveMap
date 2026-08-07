@@ -2,35 +2,48 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_picker/file_picker.dart';
-import '../models/survey_data.dart';
+import '../models/station.dart';
 
 /// Service for exporting and importing survey data
 class ExportService {
   /// Export survey data to CSV format
   Future<File> exportToCSV(
-    List<SurveyData> surveyPoints,
+    List<Station> stations,
+    List<SurveyLeg> legs,
     String fileName,
   ) async {
     final buffer = StringBuffer();
 
-    // CSV header
-    buffer.writeln(
-      'recordNumber,distance,heading,depth,left,right,up,down,rtype,timestamp',
-    );
-
-    // CSV rows
-    for (final point in surveyPoints) {
+    // Stations section
+    buffer.writeln('[Stations]');
+    buffer.writeln('number,depth,timestamp');
+    for (final s in stations) {
       buffer.writeln(
-        '${point.recordNumber},'
-        '${point.distance},'
-        '${point.heading},'
-        '${point.depth},'
-        '${point.left},'
-        '${point.right},'
-        '${point.up},'
-        '${point.down},'
-        '${point.rtype},'
-        '${point.timestamp.toIso8601String()}',
+        '${s.number},'
+        '${s.depth},'
+        '${s.timestamp.toIso8601String()}',
+      );
+    }
+
+    buffer.writeln();
+
+    // Legs section
+    buffer.writeln('[Legs]');
+    buffer.writeln('fromStation,toStation,distance,heading,left,right,up,down,timestamp');
+    final stationMap = {for (final s in stations) s.id: s};
+    for (final leg in legs) {
+      final fromNum = stationMap[leg.fromStationId]?.number ?? 0;
+      final toNum = stationMap[leg.toStationId]?.number ?? 0;
+      buffer.writeln(
+        '$fromNum,'
+        '$toNum,'
+        '${leg.distance},'
+        '${leg.heading},'
+        '${leg.left},'
+        '${leg.right},'
+        '${leg.up},'
+        '${leg.down},'
+        '${leg.timestamp.toIso8601String()}',
       );
     }
 
@@ -39,20 +52,19 @@ class ExportService {
 
   /// Export survey data to Therion diving format
   Future<File> exportToTherion(
-    List<SurveyData> surveyPoints,
+    List<Station> stations,
+    List<SurveyLeg> legs,
     String surveyName,
   ) async {
-    return _writeFile('$surveyName.th', buildTherionContent(surveyPoints, surveyName));
+    return _writeFile(
+        '$surveyName.th', buildTherionContent(stations, legs, surveyName));
   }
 
   /// Build the Therion .th file content as a string.
-  ///
-  /// Exposed for testing; use [exportToTherion] for normal export.
-  String buildTherionContent(List<SurveyData> surveyPoints, String surveyName) {
+  String buildTherionContent(
+      List<Station> stations, List<SurveyLeg> legs, String surveyName) {
     final buffer = StringBuffer();
-
-    // Skip auto-collected intermediate points; only survey stations are exported.
-    final stations = surveyPoints.where((p) => p.rtype != 'auto').toList();
+    final stationMap = {for (final s in stations) s.id: s};
 
     // Derive survey date from the first station's timestamp.
     String surveyDate = '';
@@ -62,7 +74,6 @@ class ExportService {
           '${ts.year}.${ts.month.toString().padLeft(2, '0')}.${ts.day.toString().padLeft(2, '0')}';
     }
 
-    // File header
     buffer.writeln('encoding  utf-8');
     buffer.writeln('');
     buffer.writeln('survey $surveyName');
@@ -74,47 +85,38 @@ class ExportService {
     buffer.writeln('    units length depth meters');
     buffer.writeln('    units compass degrees');
     buffer.writeln('');
-    buffer.writeln('    # Converted from $surveyName.csv');
-    buffer.writeln(
-      '    # CSV columns: cumulative distance, heading (forward compass), absolute depth',
-    );
-    buffer.writeln(
-      '    # Leg lengths = difference of consecutive cumulative distances',
-    );
     buffer.writeln('    data diving from to length compass fromdepth todepth');
 
-    for (int i = 0; i < stations.length - 1; i++) {
-      final from = stations[i];
-      final to = stations[i + 1];
-
-      final legLength = to.distance - from.distance;
-      // Compass is the forward bearing recorded AT the from-station (looking
-      // toward the to-station). This matches the map-screen convention which
-      // uses manualPoints[i-1].heading (the from-point heading) to plot legs.
-      final compass = from.heading;
-      final fromDepth = from.depth;
-      final toDepth = to.depth;
+    for (final leg in legs) {
+      final from = stationMap[leg.fromStationId];
+      final to = stationMap[leg.toStationId];
+      if (from == null || to == null) continue;
 
       buffer.writeln(
-        '    ${i.toString().padLeft(3)}  ${(i + 1).toString().padLeft(2)}'
-        '  ${legLength.toStringAsFixed(2).padLeft(7)}'
-        '  ${compass.toStringAsFixed(2).padLeft(7)}'
-        '  ${fromDepth.toStringAsFixed(1).padLeft(5)}'
-        '  ${toDepth.toStringAsFixed(1)}',
+        '    ${from.number.toString().padLeft(3)}  ${to.number.toString().padLeft(2)}'
+        '  ${leg.distance.toStringAsFixed(2).padLeft(7)}'
+        '  ${leg.heading.toStringAsFixed(2).padLeft(7)}'
+        '  ${from.depth.toStringAsFixed(1).padLeft(5)}'
+        '  ${to.depth.toStringAsFixed(1)}',
       );
     }
 
     buffer.writeln('');
     buffer.writeln('    data dimensions station left right up down');
-    for (int i = 0; i < stations.length; i++) {
-      final point = stations[i];
-      if (point.rtype == 'manual') {
+    // Use first connected leg's LRUD for each station (Therion expects one set per station)
+    final stationLrud = <int, SurveyLeg>{};
+    for (final leg in legs) {
+      stationLrud.putIfAbsent(leg.toStationId, () => leg);
+    }
+    for (final station in stations) {
+      final leg = stationLrud[station.id];
+      if (leg != null) {
         buffer.writeln(
-          '    $i '
-          '${point.left.toStringAsFixed(2)} '
-          '${point.right.toStringAsFixed(2)} '
-          '${point.up.toStringAsFixed(2)} '
-          '${point.down.toStringAsFixed(2)}',
+          '    ${station.number} '
+          '${leg.left.toStringAsFixed(2)} '
+          '${leg.right.toStringAsFixed(2)} '
+          '${leg.up.toStringAsFixed(2)} '
+          '${leg.down.toStringAsFixed(2)}',
         );
       }
     }
@@ -175,39 +177,30 @@ class ExportService {
   }
 
   /// Export survey data to CSV and immediately share via system dialog.
-  ///
-  /// Convenience method combining exportToCSV() and shareFile().
   Future<File> exportAndShareCSV(
-    List<SurveyData> surveyPoints,
+    List<Station> stations,
+    List<SurveyLeg> legs,
     String fileName,
   ) async {
-    final file = await exportToCSV(surveyPoints, fileName);
+    final file = await exportToCSV(stations, legs, fileName);
     await shareFile(file, 'Survey Data: $fileName');
     return file;
   }
 
   /// Export survey data to Therion format and immediately share via system dialog.
-  ///
-  /// Convenience method combining exportToTherion() and shareFile().
   Future<File> exportAndShareTherion(
-    List<SurveyData> surveyPoints,
+    List<Station> stations,
+    List<SurveyLeg> legs,
     String surveyName,
   ) async {
-    final file = await exportToTherion(surveyPoints, surveyName);
+    final file = await exportToTherion(stations, legs, surveyName);
     await shareFile(file, 'Therion Survey: $surveyName');
     return file;
   }
 
   /// Import survey data from a CSV file selected by the user.
-  ///
-  /// Opens a file picker dialog allowing the user to select a CSV file.
-  /// Parses the CSV and returns a list of SurveyData objects.
-  ///
-  /// Throws:
-  /// - [Exception] if no file is selected
-  /// - [FormatException] if CSV format is invalid
-  Future<List<SurveyData>> importFromCSV() async {
-    // Open file picker
+  /// Returns parsed stations and legs as a record.
+  Future<({List<Station> stations, List<SurveyLeg> legs})> importFromCSV() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['csv'],
@@ -226,58 +219,77 @@ class ExportService {
     final file = File(filePath);
     final content = await file.readAsString();
 
-    return _parseCSV(content);
+    return parseCSV(content);
   }
 
-  /// Parse CSV content into list of SurveyData objects
-  List<SurveyData> _parseCSV(String content) {
-    final lines = content.split('\n').where((line) => line.trim().isNotEmpty).toList();
+  /// Parse CSV content with [Stations] and [Legs] sections.
+  ({List<Station> stations, List<SurveyLeg> legs}) parseCSV(String content) {
+    final lines = content.split('\n').map((l) => l.trim()).toList();
 
-    if (lines.isEmpty) {
-      throw FormatException('CSV file is empty');
-    }
+    final stations = <Station>[];
+    final legs = <SurveyLeg>[];
 
-    // Verify header
-    final header = lines[0].trim();
-    if (header != 'recordNumber,distance,heading,depth,left,right,up,down,rtype,timestamp') {
-      throw FormatException(
-        'Invalid CSV header. Expected: recordNumber,distance,heading,depth,left,right,up,down,rtype,timestamp',
-      );
-    }
+    String? currentSection;
+    bool headerSkipped = false;
 
-    final surveyData = <SurveyData>[];
-
-    for (int i = 1; i < lines.length; i++) {
-      final line = lines[i].trim();
-      if (line.isEmpty) continue;
-
-      final parts = line.split(',');
-      if (parts.length != 10) {
-        throw FormatException('Invalid CSV row at line ${i + 1}: expected 10 columns, got ${parts.length}');
+    for (final line in lines) {
+      if (line.isEmpty) {
+        currentSection = null;
+        headerSkipped = false;
+        continue;
       }
 
-      try {
-        surveyData.add(SurveyData(
-          recordNumber: int.parse(parts[0]),
-          distance: double.parse(parts[1]),
-          heading: double.parse(parts[2]),
-          depth: double.parse(parts[3]),
+      if (line == '[Stations]') {
+        currentSection = 'stations';
+        headerSkipped = false;
+        continue;
+      } else if (line == '[Legs]') {
+        currentSection = 'legs';
+        headerSkipped = false;
+        continue;
+      }
+
+      if (currentSection == null) continue;
+
+      // Skip header row
+      if (!headerSkipped) {
+        headerSkipped = true;
+        continue;
+      }
+
+      final parts = line.split(',');
+
+      if (currentSection == 'stations') {
+        if (parts.length < 3) {
+          throw FormatException('Invalid station row: $line');
+        }
+        stations.add(Station(
+          number: int.parse(parts[0]),
+          depth: double.parse(parts[1]),
+          timestamp: DateTime.parse(parts[2]),
+        ));
+      } else if (currentSection == 'legs') {
+        if (parts.length < 9) {
+          throw FormatException('Invalid leg row: $line');
+        }
+        legs.add(SurveyLeg(
+          fromStationId: int.parse(parts[0]),
+          toStationId: int.parse(parts[1]),
+          distance: double.parse(parts[2]),
+          heading: double.parse(parts[3]),
           left: double.parse(parts[4]),
           right: double.parse(parts[5]),
           up: double.parse(parts[6]),
           down: double.parse(parts[7]),
-          rtype: parts[8],
-          timestamp: DateTime.parse(parts[9]),
+          timestamp: DateTime.parse(parts[8]),
         ));
-      } catch (e) {
-        throw FormatException('Error parsing CSV row at line ${i + 1}: $e');
       }
     }
 
-    if (surveyData.isEmpty) {
-      throw FormatException('No valid data found in CSV file');
+    if (stations.isEmpty) {
+      throw FormatException('No stations found in CSV file');
     }
 
-    return surveyData;
+    return (stations: stations, legs: legs);
   }
 }

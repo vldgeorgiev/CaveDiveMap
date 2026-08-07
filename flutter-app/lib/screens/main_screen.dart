@@ -179,11 +179,12 @@ class _MainScreenState extends State<MainScreen>
     final wasRecording = magnetometerService.isRecording;
 
     // Get current survey data
-    final surveyData = await storageService.getAllSurveyData();
+    final stations = storageService.stations;
+    final surveyLegs = storageService.legs;
 
     // Export data before reset if there is any
     String? exportedPath;
-    if (surveyData.isNotEmpty) {
+    if (stations.isNotEmpty) {
       try {
         final timestamp = DateTime.now();
         final fileName =
@@ -192,7 +193,7 @@ class _MainScreenState extends State<MainScreen>
             '${timestamp.hour.toString().padLeft(2, '0')}-${timestamp.minute.toString().padLeft(2, '0')}-${timestamp.second.toString().padLeft(2, '0')}'
             '.csv';
 
-        final file = await exportService.exportToCSV(surveyData, fileName);
+        final file = await exportService.exportToCSV(stations, surveyLegs, fileName);
         exportedPath = file.path;
       } catch (e) {
         // Show error but continue with reset
@@ -221,7 +222,7 @@ class _MainScreenState extends State<MainScreen>
     if (mounted) {
       final message = exportedPath != null
           ? 'Data exported and reset successfully\nBackup: $exportedPath'
-          : surveyData.isEmpty
+          : stations.isEmpty
           ? 'No data to export - reset complete'
           : 'Data reset successfully (export failed)';
 
@@ -288,6 +289,27 @@ class _MainScreenState extends State<MainScreen>
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              // Warning if no station saved yet
+                              if (magnetometer.isMeasurementBlocked)
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(8),
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.orange),
+                                  ),
+                                  child: const Text(
+                                    'Save a station before measuring',
+                                    style: TextStyle(
+                                      color: Colors.orange,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+
                               // Heading with large typography
                               _buildLargeDataRow(
                                 'Heading',
@@ -302,24 +324,26 @@ class _MainScreenState extends State<MainScreen>
                               ),
                               const SizedBox(height: AppSpacing.small),
 
-                              // Distance with large typography
-                              _buildLargeDataRow(
-                                'Distance',
-                                '${magnetometer.totalDistance.toStringAsFixed(2)} m',
-                                AppTextStyles.largeTitle,
-                              ),
-                              const SizedBox(height: AppSpacing.small),
-
-                              // Point number (smaller text)
-                              _buildLargeDataRow(
-                                'Points',
-                                context
-                                    .watch<StorageService>()
-                                    .surveyPoints
-                                    .length
-                                    .toString(),
-                                AppTextStyles.body,
-                              ),
+                              Builder(builder: (context) {
+                                final storage = context.watch<StorageService>();
+                                final legDistance = magnetometer.totalDistance - storage.departureDistance;
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildLargeDataRow(
+                                      'Leg distance',
+                                      '${legDistance.toStringAsFixed(2)} m',
+                                      AppTextStyles.largeTitle,
+                                    ),
+                                    const SizedBox(height: AppSpacing.small),
+                                    _buildLargeDataRow(
+                                      'Active station',
+                                      '${storage.currentDepartureStationId != null ? storage.getStationById(storage.currentDepartureStationId!)?.number ?? '—' : '—'}',
+                                      AppTextStyles.body,
+                                    ),
+                                  ],
+                                );
+                              }),
                               const SizedBox(height: AppSpacing.small),
 
                               // Magnetic strength indicator

@@ -3,20 +3,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:cavedivemapf/models/settings.dart';
-import 'package:cavedivemapf/models/survey_data.dart';
+import 'package:cavedivemapf/models/station.dart';
 import 'package:cavedivemapf/screens/map_screen.dart';
 import 'package:cavedivemapf/services/export_service.dart';
 import 'package:cavedivemapf/services/storage_service.dart';
 
 class _FakeStorageService extends StorageService {
-  _FakeStorageService(this._points);
+  _FakeStorageService(this._stations, this._legs);
 
-  final List<SurveyData> _points;
+  final List<Station> _stations;
+  final List<SurveyLeg> _legs;
 
   @override
-  Future<List<SurveyData>> getAllSurveyData() async {
-    return List<SurveyData>.from(_points);
-  }
+  List<Station> get stations => _stations;
+
+  @override
+  List<SurveyLeg> get legs => _legs;
 }
 
 class _FakeExportService extends ExportService {
@@ -24,7 +26,8 @@ class _FakeExportService extends ExportService {
 
   @override
   Future<File> exportToCSV(
-    List<SurveyData> surveyPoints,
+    List<Station> stations,
+    List<SurveyLeg> legs,
     String fileName,
   ) async {
     csvCalls++;
@@ -34,7 +37,8 @@ class _FakeExportService extends ExportService {
 
   @override
   Future<File> exportToTherion(
-    List<SurveyData> surveyPoints,
+    List<Station> stations,
+    List<SurveyLeg> legs,
     String surveyName,
   ) async {
     final file = File('${Directory.systemTemp.path}/$surveyName.th');
@@ -75,40 +79,42 @@ void main() {
     return customPaint.painter! as CaveMapPainter;
   }
 
-  List<SurveyData> sampleManualPoints() {
+  void sampleData(List<Station> stations, List<SurveyLeg> legs) {
     final now = DateTime(2026, 1, 1);
-    return [
-      SurveyData(
-        recordNumber: 1,
-        distance: 0,
-        heading: 0,
+    stations.addAll([
+      Station(
+        id: 1,
+        number: 1,
         depth: 5,
-        left: 1,
-        right: 1,
-        up: 1,
-        down: 1,
-        rtype: 'manual',
         timestamp: now,
       ),
-      SurveyData(
-        recordNumber: 2,
-        distance: 10,
-        heading: 45,
+      Station(
+        id: 2,
+        number: 2,
         depth: 6,
-        left: 1,
-        right: 1,
-        up: 1,
-        down: 1,
-        rtype: 'manual',
         timestamp: now.add(const Duration(seconds: 1)),
       ),
-    ];
+    ]);
+    legs.add(SurveyLeg(
+      fromStationId: 1,
+      toStationId: 2,
+      distance: 10,
+      heading: 45,
+      left: 1,
+      right: 1,
+      up: 1,
+      down: 1,
+      timestamp: now.add(const Duration(seconds: 1)),
+    ));
   }
 
   testWidgets('export overlay touch does not modify map transform', (
     tester,
   ) async {
-    final storage = _FakeStorageService(sampleManualPoints());
+    final stations = <Station>[];
+    final legs = <SurveyLeg>[];
+    sampleData(stations, legs);
+    final storage = _FakeStorageService(stations, legs);
     final export = _FakeExportService();
     await pumpMap(tester, storage: storage, export: export);
 
@@ -125,7 +131,10 @@ void main() {
   testWidgets('view mode control touch does not pan/zoom/rotate map', (
     tester,
   ) async {
-    final storage = _FakeStorageService(sampleManualPoints());
+    final stations = <Station>[];
+    final legs = <SurveyLeg>[];
+    sampleData(stations, legs);
+    final storage = _FakeStorageService(stations, legs);
     final export = _FakeExportService();
     await pumpMap(tester, storage: storage, export: export);
 

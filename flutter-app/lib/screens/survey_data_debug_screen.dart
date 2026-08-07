@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/storage_service.dart';
-import '../models/survey_data.dart';
+import '../models/station.dart';
 import '../utils/theme_extensions.dart';
 
 /// Debug screen for viewing survey data in table format
@@ -16,25 +16,12 @@ class SurveyDataDebugScreen extends StatelessWidget {
         title: const Text('Survey Data Debug'),
         backgroundColor: AppColors.backgroundSecondary,
       ),
-      body: FutureBuilder<List<SurveyData>>(
-        future: context.read<StorageService>().getAllSurveyData(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body: Consumer<StorageService>(
+        builder: (context, storageService, _) {
+          final stations = storageService.stations;
+          final legs = storageService.legs;
 
-          if (snapshot.hasError) {
-            return Center(
-              child: Text(
-                'Error loading survey data: ${snapshot.error}',
-                style: AppTextStyles.body.copyWith(color: Colors.red),
-              ),
-            );
-          }
-
-          final surveyData = snapshot.data ?? [];
-
-          if (surveyData.isEmpty) {
+          if (stations.isEmpty) {
             return Center(
               child: Text(
                 'No survey data collected yet',
@@ -45,7 +32,6 @@ class SurveyDataDebugScreen extends StatelessWidget {
 
           return Column(
             children: [
-              // Header with point count
               Container(
                 padding: const EdgeInsets.all(16),
                 color: AppColors.backgroundSecondary,
@@ -53,174 +39,117 @@ class SurveyDataDebugScreen extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Total Points: ${surveyData.length}',
+                      'Stations: ${stations.length}',
                       style: AppTextStyles.headline.copyWith(fontSize: 16),
                     ),
                     Text(
-                      'Manual: ${surveyData.where((d) => d.rtype == 'manual').length}',
+                      'Legs: ${legs.length}',
                       style: AppTextStyles.body,
                     ),
                   ],
                 ),
               ),
-              // Data table
               Expanded(
                 child: SingleChildScrollView(
-                  scrollDirection: Axis.vertical,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: DataTable(
-                      headingRowColor: WidgetStateProperty.all(
-                        AppColors.backgroundSecondary,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Stations table
+                      Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Text('Stations',
+                            style: AppTextStyles.headline
+                                .copyWith(fontSize: 14, color: Colors.cyan)),
                       ),
-                      dataRowMinHeight: 32,
-                      dataRowMaxHeight: 40,
-                      columnSpacing: 16,
-                      columns: const [
-                        DataColumn(
-                          label: Text(
-                            '#',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: DataTable(
+                          headingRowColor: WidgetStateProperty.all(
+                            AppColors.backgroundSecondary,
                           ),
+                          dataRowMinHeight: 32,
+                          dataRowMaxHeight: 40,
+                          columnSpacing: 16,
+                          columns: const [
+                            DataColumn(label: _ColHeader('#')),
+                            DataColumn(label: _ColHeader('Depth (m)')),
+                          ],
+                          rows: stations
+                              .map((s) => DataRow(
+                                    color: WidgetStateProperty.all(
+                                      AppColors.actionExportCSV
+                                          .withOpacity(0.1),
+                                    ),
+                                    cells: [
+                                      DataCell(
+                                          _buildMonospaceText('${s.number}')),
+                                      DataCell(_buildMonospaceText(
+                                          s.depth.toStringAsFixed(2))),
+                                    ],
+                                  ))
+                              .toList(),
                         ),
-                        DataColumn(
-                          label: Text(
-                            'Dist (m)',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Legs table
+                      if (legs.isNotEmpty) ...[
+                        Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Text('Survey Legs',
+                              style: AppTextStyles.headline
+                                  .copyWith(fontSize: 14, color: Colors.cyan)),
                         ),
-                        DataColumn(
-                          label: Text(
-                            'Azim (°)',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: DataTable(
+                            headingRowColor: WidgetStateProperty.all(
+                              AppColors.backgroundSecondary,
                             ),
-                          ),
-                        ),
-                        DataColumn(
-                          label: Text(
-                            'Depth (m)',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                        DataColumn(
-                          label: Text(
-                            'Left (m)',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                        DataColumn(
-                          label: Text(
-                            'Right (m)',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                        DataColumn(
-                          label: Text(
-                            'Up (m)',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                        DataColumn(
-                          label: Text(
-                            'Down (m)',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                        DataColumn(
-                          label: Text(
-                            'Type',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
+                            dataRowMinHeight: 32,
+                            dataRowMaxHeight: 40,
+                            columnSpacing: 16,
+                            columns: const [
+                              DataColumn(label: _ColHeader('From')),
+                              DataColumn(label: _ColHeader('To')),
+                              DataColumn(label: _ColHeader('Dist (m)')),
+                              DataColumn(label: _ColHeader('Azim (°)')),
+                              DataColumn(label: _ColHeader('L')),
+                              DataColumn(label: _ColHeader('R')),
+                              DataColumn(label: _ColHeader('U')),
+                              DataColumn(label: _ColHeader('D')),
+                            ],
+                            rows: legs.map((leg) {
+                              final fromStation = stations
+                                  .where((s) => s.id == leg.fromStationId)
+                                  .firstOrNull;
+                              final toStation = stations
+                                  .where((s) => s.id == leg.toStationId)
+                                  .firstOrNull;
+                              return DataRow(cells: [
+                                DataCell(_buildMonospaceText(
+                                    '${fromStation?.number ?? '?'}')),
+                                DataCell(_buildMonospaceText(
+                                    '${toStation?.number ?? '?'}')),
+                                DataCell(_buildMonospaceText(
+                                    leg.distance.toStringAsFixed(2))),
+                                DataCell(_buildMonospaceText(
+                                    leg.heading.toStringAsFixed(1))),
+                                DataCell(_buildMonospaceText(
+                                    leg.left.toStringAsFixed(1))),
+                                DataCell(_buildMonospaceText(
+                                    leg.right.toStringAsFixed(1))),
+                                DataCell(_buildMonospaceText(
+                                    leg.up.toStringAsFixed(1))),
+                                DataCell(_buildMonospaceText(
+                                    leg.down.toStringAsFixed(1))),
+                              ]);
+                            }).toList(),
                           ),
                         ),
                       ],
-                      rows: surveyData.map((point) {
-                        final isManual = point.rtype == 'manual';
-                        return DataRow(
-                          color: WidgetStateProperty.all(
-                            isManual
-                                ? AppColors.actionExportCSV.withOpacity(0.1)
-                                : Colors.transparent,
-                          ),
-                          cells: [
-                            DataCell(
-                              _buildMonospaceText('${point.recordNumber}'),
-                            ),
-                            DataCell(
-                              _buildMonospaceText(
-                                point.distance.toStringAsFixed(2),
-                              ),
-                            ),
-                            DataCell(
-                              _buildMonospaceText(
-                                point.heading.toStringAsFixed(1),
-                              ),
-                            ),
-                            DataCell(
-                              _buildMonospaceText(
-                                point.depth.toStringAsFixed(2),
-                              ),
-                            ),
-                            DataCell(
-                              _buildMonospaceText(
-                                point.left.toStringAsFixed(2),
-                              ),
-                            ),
-                            DataCell(
-                              _buildMonospaceText(
-                                point.right.toStringAsFixed(2),
-                              ),
-                            ),
-                            DataCell(
-                              _buildMonospaceText(point.up.toStringAsFixed(2)),
-                            ),
-                            DataCell(
-                              _buildMonospaceText(
-                                point.down.toStringAsFixed(2),
-                              ),
-                            ),
-                            DataCell(
-                              Text(
-                                point.rtype,
-                                style: TextStyle(
-                                  color: isManual
-                                      ? AppColors.actionExportCSV
-                                      : Colors.grey,
-                                  fontWeight: isManual
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                                ),
-                              ),
-                            ),
-                          ],
-                        );
-                      }).toList(),
-                    ),
+                    ],
                   ),
                 ),
               ),
@@ -239,6 +168,19 @@ class SurveyDataDebugScreen extends StatelessWidget {
         fontSize: 13,
         color: Colors.white,
       ),
+    );
+  }
+}
+
+class _ColHeader extends StatelessWidget {
+  final String text;
+  const _ColHeader(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
     );
   }
 }

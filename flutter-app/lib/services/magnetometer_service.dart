@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:sensors_plus/sensors_plus.dart';
-import '../models/survey_data.dart';
+import '../models/station.dart';
 import 'storage_service.dart';
 import 'rotation_detection/rotation_algorithm.dart';
 import 'rotation_detection/pca_rotation_detector.dart';
@@ -73,16 +73,23 @@ class MagnetometerService extends ChangeNotifier {
   // Statistics
   DateTime? _lastRotationTime;
   double _averageRotationInterval = 0.0;
+  bool _pendingMeasurementBlocked = false;
 
   MagnetometerService(this._storageService) {
     // Initialize point counter from persisted data to maintain continuity
-    _currentPointNumber = _storageService.surveyPoints.length;
+    _currentPointNumber = _storageService.stations.length;
 
-    // Initialize distance from last saved point for cumulative tracking
-    // This ensures distance continues from where it left off after app restart
-    if (_storageService.surveyPoints.isNotEmpty) {
-      _currentDistance = _storageService.surveyPoints.last.distance;
+    // Restore cumulative distance from legs or departure distance (whichever is greater)
+    double total = 0.0;
+    for (final leg in _storageService.legs) {
+      total += leg.distance;
     }
+    _currentDistance = total > _storageService.departureDistance
+        ? total
+        : _storageService.departureDistance;
+
+    // Sync departure so the leg starts at 0 on restart
+    _storageService.setDepartureDistance(_currentDistance);
 
     // Auto-start listening and recording since the app has no manual start
     // control. This ensures rotation detection begins immediately on launch.
@@ -92,6 +99,7 @@ class MagnetometerService extends ChangeNotifier {
 
   // Getters
   bool get isRecording => _isRecording;
+  bool get isMeasurementBlocked => _pendingMeasurementBlocked;
   double get currentDistance => _currentDistance;
   double get currentDepth => _currentDepth;
   double get totalDistance => _currentDistance;
@@ -439,6 +447,14 @@ class MagnetometerService extends ChangeNotifier {
 
   /// Handle rotation detection
   void _onRotationDetected() {
+    // Block measurement until a station is saved (start of survey or after station switch)
+    if (_storageService.needsLegStart) {
+      _pendingMeasurementBlocked = true;
+      notifyListeners();
+      return;
+    }
+
+    _pendingMeasurementBlocked = false;
     // Note: _rotationCount already incremented by caller
 
     // Update rotation timing statistics
@@ -467,18 +483,16 @@ class MagnetometerService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Automatically save survey point on each rotation
+  /// Automatically save debug auto-point on each rotation
   Future<void> _autoSaveSurveyPoint() async {
-    final point = SurveyData(
-      recordNumber: _storageService.nextPointNumber,
+    final point = AutoPoint(
       distance: _currentDistance,
       heading: _currentHeading,
       depth: _currentDepth,
-      rtype: 'auto',
       timestamp: DateTime.now(),
     );
 
-    await _storageService.addSurveyPoint(point);
+    await _storageService.addAutoPoint(point);
   }
 
   @override

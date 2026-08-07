@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/survey_data.dart';
+import '../models/station.dart';
 import '../models/settings.dart';
 import '../services/storage_service.dart';
+import '../services/magnetometer_service.dart';
 import '../services/export_service.dart';
 import '../utils/theme_extensions.dart';
 import 'dart:math' as math;
@@ -38,8 +39,6 @@ class _MapScreenState extends State<MapScreen> {
   bool _isFirstLoadElevation = true;
   bool _isOverlayInteractionActive = false;
 
-  late Future<List<SurveyData>> _surveyFuture;
-
   // Getters for current view's state
   double get _scale =>
       _viewMode == MapViewMode.plan ? _planScale : _elevationScale;
@@ -71,7 +70,6 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
     super.initState();
-    _surveyFuture = context.read<StorageService>().getAllSurveyData();
   }
 
   @override
@@ -89,39 +87,15 @@ class _MapScreenState extends State<MapScreen> {
           ),
         ],
       ),
-      body: FutureBuilder<List<SurveyData>>(
-        future: _surveyFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body: Consumer<StorageService>(
+        builder: (context, storageService, _) {
+          final stations = storageService.stations;
+          final surveyLegs = storageService.legs;
 
-          if (snapshot.hasError) {
-            return Center(
-              child: Text(
-                'Error loading survey data: ${snapshot.error}',
-                style: const TextStyle(color: Colors.red),
-              ),
-            );
-          }
-
-          final allSurveyData = snapshot.data ?? [];
-          final manualPoints = _getManualPoints(allSurveyData);
-
-          if (allSurveyData.isEmpty) {
+          if (stations.isEmpty) {
             return const Center(
               child: Text(
                 'No survey data yet.\nStart surveying to see the map.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey, fontSize: 16),
-              ),
-            );
-          }
-
-          if (manualPoints.isEmpty) {
-            return const Center(
-              child: Text(
-                'No manual survey points yet.\nManual points with reliable compass data are required for map visualization.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey, fontSize: 16),
               ),
@@ -135,7 +109,7 @@ class _MapScreenState extends State<MapScreen> {
 
           if (needsAutoFit) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              _performAutoFit(manualPoints);
+              _performAutoFit(stations, surveyLegs);
               if (_viewMode == MapViewMode.plan) {
                 _isFirstLoadPlan = false;
               } else {
@@ -188,13 +162,75 @@ class _MapScreenState extends State<MapScreen> {
                   child: CustomPaint(
                     key: const Key('map_canvas'),
                     painter: CaveMapPainter(
-                      surveyData: manualPoints,
+                      stations: stations,
+                      legs: surveyLegs,
                       scale: _scale,
                       offset: _offset,
                       rotation: _rotation,
                       viewMode: _viewMode,
+                      activeStationId: storageService.currentDepartureStationId,
                     ),
                   ),
+                ),
+              ),
+
+              // Long-press layer for station selection (separate from pan/zoom)
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onLongPressStart: (details) {
+                    if (_isOverlayInteractionActive) return;
+
+                    // Block station switch if distance measured since last save
+                    final magnetometer = context.read<MagnetometerService>();
+                    if (magnetometer.totalDistance > storageService.departureDistance) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Save measured section before switching stations'),
+                          backgroundColor: Colors.orange,
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                      return;
+                    }
+
+                    final renderBox = context.findRenderObject() as RenderBox;
+                    final size = renderBox.size;
+                    final painter = CaveMapPainter(
+                      stations: stations,
+                      legs: surveyLegs,
+                      scale: _scale,
+                      offset: _offset,
+                      rotation: _rotation,
+                      viewMode: _viewMode,
+                      activeStationId: storageService.currentDepartureStationId,
+                    );
+                    final hitId = painter.hitTestStation(details.localPosition, size);
+                    if (hitId != null) {
+                      // BFS to compute cumulative distance to the selected station
+                      final visited = <int>{};
+                      final queue = <int>[stations.first.id!];
+                      final distTo = <int, double>{stations.first.id!: 0};
+                      final adj = <int, List<SurveyLeg>>{};
+                      for (final l in surveyLegs) {
+                        adj.putIfAbsent(l.fromStationId, () => []).add(l);
+                      }
+                      while (queue.isNotEmpty) {
+                        final cur = queue.removeAt(0);
+                        if (visited.contains(cur)) continue;
+                        visited.add(cur);
+                        for (final l in adj[cur] ?? []) {
+                          if (!visited.contains(l.toStationId)) {
+                            distTo[l.toStationId] = (distTo[cur] ?? 0) + l.distance;
+                            queue.add(l.toStationId);
+                          }
+                        }
+                      }
+                      storageService.setCurrentDepartureStationId(hitId, isStationSwitch: true);
+                      storageService.setDepartureDistance(magnetometer.totalDistance);
+                      setState(() {});
+                    }
+                  },
                 ),
               ),
 
@@ -212,7 +248,7 @@ class _MapScreenState extends State<MapScreen> {
               Positioned(
                 top: 80,
                 left: 16,
-                child: _buildStatsOverlay(allSurveyData, manualPoints),
+                child: _buildStatsOverlay(stations, surveyLegs),
               ),
 
               // Export buttons
@@ -222,11 +258,6 @@ class _MapScreenState extends State<MapScreen> {
         },
       ),
     );
-  }
-
-  /// Filter survey data to only manual points
-  List<SurveyData> _getManualPoints(List<SurveyData> allPoints) {
-    return allPoints.where((point) => point.rtype == 'manual').toList();
   }
 
   /// Build view mode toggle widget
@@ -302,22 +333,21 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  /// Auto-fit view to show all manual points (async version for button)
-  void _autoFitView() async {
+  /// Auto-fit view to show all stations (async version for button)
+  void _autoFitView() {
     final storageService = context.read<StorageService>();
-    final allData = await storageService.getAllSurveyData();
-    final manualPoints = _getManualPoints(allData);
+    final stations = storageService.stations;
+    final legs = storageService.legs;
 
-    if (!mounted) return;
-    _performAutoFit(manualPoints);
+    _performAutoFit(stations, legs);
   }
 
-  /// Perform auto-fit with provided manual points (sync version)
-  void _performAutoFit(List<SurveyData> manualPoints) {
-    if (manualPoints.isEmpty) return;
+  /// Perform auto-fit with provided stations and legs
+  void _performAutoFit(List<Station> stations, List<SurveyLeg> legs) {
+    if (stations.isEmpty) return;
 
     final size = MediaQuery.of(context).size;
-    final bounds = _calculateSurveyBounds(manualPoints);
+    final bounds = _calculateSurveyBounds(stations, legs);
 
     if (bounds.width == 0 || bounds.height == 0) {
       // Single point or zero-size bounds
@@ -354,71 +384,136 @@ class _MapScreenState extends State<MapScreen> {
     });
   }
 
-  /// Calculate bounding box for survey points
-  Rect _calculateSurveyBounds(List<SurveyData> manualPoints) {
-    if (manualPoints.isEmpty) return Rect.zero;
+  /// Calculate bounding box by traversing legs graph
+  Rect _calculateSurveyBounds(List<Station> stations, List<SurveyLeg> legs) {
+    if (stations.isEmpty) return Rect.zero;
+
+    final positions = _computeStationPositions(stations, legs);
 
     if (_viewMode == MapViewMode.plan) {
-      // Plan view: Calculate XY from heading/distance
       double minX = double.infinity;
       double maxX = -double.infinity;
       double minY = double.infinity;
       double maxY = -double.infinity;
 
-      double x = 0, y = 0;
-      for (int i = 0; i < manualPoints.length; i++) {
-        if (i > 0) {
-          final deltaDistance =
-              manualPoints[i].distance - manualPoints[i - 1].distance;
-          // Use heading from previous point (matches painter logic)
-          final headingRad = manualPoints[i - 1].heading * math.pi / 180;
-          // North is up (negative Y), East is right (positive X) - matches painter
-          x += deltaDistance * math.sin(headingRad);
-          y -= deltaDistance * math.cos(headingRad);
-        }
+      final stationMap = {for (final s in stations) s.id: s};
 
-        // Include passage dimensions in bounds
-        final left = manualPoints[i].left;
-        final right = manualPoints[i].right;
-        final headingRad = manualPoints[i].heading * math.pi / 180;
+      for (final entry in positions.entries) {
+        final pos = entry.value;
+
+        // Get max LRUD from legs connected to this station
+        final connectedLegs = legs.where(
+            (l) => l.fromStationId == entry.key || l.toStationId == entry.key);
+        if (connectedLegs.isEmpty) {
+          minX = math.min(minX, pos.dx);
+          maxX = math.max(maxX, pos.dx);
+          minY = math.min(minY, pos.dy);
+          maxY = math.max(maxY, pos.dy);
+          continue;
+        }
+        final leg = connectedLegs.first;
+        final headingRad = leg.heading * math.pi / 180;
         final perpRad = headingRad + math.pi / 2;
 
-        // Right perpendicular in screen coords: (sin(perpRad), -cos(perpRad))
-        // Left wall point (opposite direction): center - right_perp * left
-        // Right wall point: center + right_perp * right
-        final lx = x - math.sin(perpRad) * left;
-        final ly = y + math.cos(perpRad) * left;
-        final rx = x + math.sin(perpRad) * right;
-        final ry = y - math.cos(perpRad) * right;
+        final lx = pos.dx - math.sin(perpRad) * leg.left;
+        final ly = pos.dy + math.cos(perpRad) * leg.left;
+        final rx = pos.dx + math.sin(perpRad) * leg.right;
+        final ry = pos.dy - math.cos(perpRad) * leg.right;
 
-        minX = math.min(minX, math.min(lx, rx));
-        maxX = math.max(maxX, math.max(lx, rx));
-        minY = math.min(minY, math.min(ly, ry));
-        maxY = math.max(maxY, math.max(ly, ry));
+        minX = math.min(minX, math.min(math.min(lx, rx), pos.dx));
+        maxX = math.max(maxX, math.max(math.max(lx, rx), pos.dx));
+        minY = math.min(minY, math.min(math.min(ly, ry), pos.dy));
+        maxY = math.max(maxY, math.max(math.max(ly, ry), pos.dy));
       }
 
       return Rect.fromLTRB(minX, minY, maxX, maxY);
     } else {
-      // Elevation view: distance x depth
-      double totalDist = 0;
+      // Elevation view
+      double maxDist = 0;
       double minDepth = double.infinity;
       double maxDepth = -double.infinity;
 
-      for (int i = 0; i < manualPoints.length; i++) {
-        if (i > 0) {
-          totalDist += manualPoints[i].distance - manualPoints[i - 1].distance;
+      final stationMap = {for (final s in stations) s.id: s};
+      // Build map of max up/down per station from connected legs
+      final stationUp = <int, double>{};
+      final stationDown = <int, double>{};
+      for (final leg in legs) {
+        for (final sid in [leg.fromStationId, leg.toStationId]) {
+          stationUp[sid] = math.max(stationUp[sid] ?? 0, leg.up);
+          stationDown[sid] = math.max(stationDown[sid] ?? 0, leg.down);
         }
-
-        final depth = manualPoints[i].depth;
-        final up = manualPoints[i].up;
-        final down = manualPoints[i].down;
-
-        minDepth = math.min(minDepth, depth - down);
-        maxDepth = math.max(maxDepth, depth + up);
       }
 
-      return Rect.fromLTRB(0, minDepth, totalDist, maxDepth);
+      for (final entry in positions.entries) {
+        final pos = entry.value;
+        final station = stationMap[entry.key];
+        if (station == null) continue;
+
+        maxDist = math.max(maxDist, pos.dx);
+        minDepth = math.min(minDepth, station.depth - (stationDown[entry.key] ?? 0));
+        maxDepth = math.max(maxDepth, station.depth + (stationUp[entry.key] ?? 0));
+      }
+
+      return Rect.fromLTRB(0, minDepth, maxDist, maxDepth);
     }
+  }
+
+  /// Compute station positions by traversing the leg graph (BFS from first station)
+  Map<int, Offset> _computeStationPositions(
+      List<Station> stations, List<SurveyLeg> legs) {
+    if (stations.isEmpty) return {};
+
+    final stationMap = {for (final s in stations) s.id: s};
+    final positions = <int, Offset>{};
+
+    // Build adjacency: fromStationId → list of legs
+    final adjacency = <int, List<SurveyLeg>>{};
+    for (final leg in legs) {
+      adjacency.putIfAbsent(leg.fromStationId, () => []).add(leg);
+    }
+
+    // BFS from the first station
+    final startId = stations.first.id!;
+    positions[startId] = Offset.zero;
+    final queue = <int>[startId];
+    double cumulativeDistance = 0;
+
+    while (queue.isNotEmpty) {
+      final currentId = queue.removeAt(0);
+      final currentPos = positions[currentId]!;
+      final currentStation = stationMap[currentId];
+
+      for (final leg in adjacency[currentId] ?? []) {
+        if (positions.containsKey(leg.toStationId)) continue;
+
+        final toStation = stationMap[leg.toStationId];
+        if (toStation == null) continue;
+
+        if (_viewMode == MapViewMode.plan) {
+          final headingRad = leg.heading * math.pi / 180;
+          final dx = leg.distance * math.sin(headingRad);
+          final dy = -leg.distance * math.cos(headingRad);
+          positions[leg.toStationId] = Offset(currentPos.dx + dx, currentPos.dy + dy);
+        } else {
+          // Elevation: X = cumulative distance along path, Y = depth
+          cumulativeDistance += leg.distance;
+          positions[leg.toStationId] = Offset(cumulativeDistance, toStation.depth);
+        }
+
+        queue.add(leg.toStationId);
+      }
+    }
+
+    // Handle orphan stations (no legs)
+    for (final station in stations) {
+      if (!positions.containsKey(station.id)) {
+        positions[station.id!] = _viewMode == MapViewMode.plan
+            ? Offset.zero
+            : Offset(0, station.depth);
+      }
+    }
+
+    return positions;
   }
 
   Widget _buildScaleIndicator() {
@@ -575,9 +670,10 @@ class _MapScreenState extends State<MapScreen> {
       final storageService = context.read<StorageService>();
       final exportService = context.read<ExportService>();
       final settings = context.read<Settings>();
-      final surveyData = await storageService.getAllSurveyData();
+      final stations = storageService.stations;
+      final surveyLegs = storageService.legs;
 
-      if (surveyData.isEmpty) {
+      if (stations.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -599,7 +695,7 @@ class _MapScreenState extends State<MapScreen> {
           '${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')}_'
           '${timestamp.hour.toString().padLeft(2, '0')}-${timestamp.minute.toString().padLeft(2, '0')}-${timestamp.second.toString().padLeft(2, '0')}'
           '.csv';
-      final file = await exportService.exportToCSV(surveyData, fileName);
+      final file = await exportService.exportToCSV(stations, surveyLegs, fileName);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -637,9 +733,10 @@ class _MapScreenState extends State<MapScreen> {
       final storageService = context.read<StorageService>();
       final exportService = context.read<ExportService>();
       final settings = context.read<Settings>();
-      final surveyData = await storageService.getAllSurveyData();
+      final stations = storageService.stations;
+      final surveyLegs = storageService.legs;
 
-      if (surveyData.isEmpty) {
+      if (stations.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -660,7 +757,7 @@ class _MapScreenState extends State<MapScreen> {
           '${settings.surveyName}_'
           '${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')}_'
           '${timestamp.hour.toString().padLeft(2, '0')}-${timestamp.minute.toString().padLeft(2, '0')}-${timestamp.second.toString().padLeft(2, '0')}';
-      final file = await exportService.exportToTherion(surveyData, surveyName);
+      final file = await exportService.exportToTherion(stations, surveyLegs, surveyName);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -704,12 +801,11 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Widget _buildStatsOverlay(
-    List<SurveyData> allData,
-    List<SurveyData> manualPoints,
+    List<Station> stations,
+    List<SurveyLeg> legs,
   ) {
-    final totalPoints = allData.length;
-    final manualCount = manualPoints.length;
-    final totalDistance = allData.isEmpty ? 0.0 : allData.last.distance;
+    final stationCount = stations.length;
+    final totalDistance = legs.fold(0.0, (sum, leg) => sum + leg.distance);
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -723,16 +819,16 @@ class _MapScreenState extends State<MapScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'Points: $totalPoints',
-            style: const TextStyle(color: Colors.white, fontSize: 12),
-          ),
-          Text(
-            'Manual: $manualCount',
+            'Stations: $stationCount',
             style: const TextStyle(
               color: Colors.cyan,
               fontSize: 12,
               fontWeight: FontWeight.bold,
             ),
+          ),
+          Text(
+            'Legs: ${legs.length}',
+            style: const TextStyle(color: Colors.white, fontSize: 12),
           ),
           Text(
             'Distance: ${totalDistance.toStringAsFixed(1)} m',
@@ -746,45 +842,72 @@ class _MapScreenState extends State<MapScreen> {
 
 /// Custom painter for rendering the cave survey map
 class CaveMapPainter extends CustomPainter {
-  final List<SurveyData> surveyData;
+  final List<Station> stations;
+  final List<SurveyLeg> legs;
   final double scale;
   final Offset offset;
   final double rotation;
   final MapViewMode viewMode;
+  final int? activeStationId;
 
   CaveMapPainter({
-    required this.surveyData,
+    required this.stations,
+    required this.legs,
     required this.scale,
     required this.offset,
     required this.rotation,
     required this.viewMode,
+    this.activeStationId,
   });
+
+  /// Convert screen position to world coordinates and find nearest station
+  int? hitTestStation(Offset screenPos, Size size) {
+    final worldPos = screenToWorld(screenPos, size);
+    final positions = _computePositions();
+    // Large touch radius for gloved underwater use
+    final hitRadius = 2.0 + 25 / scale;
+
+    int? closest;
+    double closestDist = double.infinity;
+    for (final entry in positions.entries) {
+      final d = (entry.value - worldPos).distance;
+      if (d < hitRadius && d < closestDist) {
+        closestDist = d;
+        closest = entry.key;
+      }
+    }
+    return closest;
+  }
+
+  /// Convert screen coordinates to world coordinates
+  Offset screenToWorld(Offset screenPos, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    var p = (screenPos - center) / scale;
+    if (viewMode == MapViewMode.plan) {
+      final cosR = math.cos(-rotation);
+      final sinR = math.sin(-rotation);
+      p = Offset(p.dx * cosR - p.dy * sinR, p.dx * sinR + p.dy * cosR);
+    }
+    return p - offset;
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
 
-    // Apply transformations in correct order:
-    // 1) Move origin to screen center
     canvas.translate(center.dx, center.dy);
-
-    // 2) Apply zoom
     canvas.scale(scale);
 
-    // 3) Apply rotation (plan view only)
     if (viewMode == MapViewMode.plan) {
-      canvas.rotate(rotation); // rotation is already in radians
+      canvas.rotate(rotation);
     }
 
-    // 4) Apply world offset (in meters)
     canvas.translate(offset.dx, offset.dy);
 
-    // Now draw everything in WORLD units (meters)
     _drawGrid(canvas, size);
 
-    if (surveyData.isEmpty) return;
+    if (stations.isEmpty) return;
 
-    // Draw based on view mode
     if (viewMode == MapViewMode.plan) {
       _drawPlanView(canvas);
     } else {
@@ -792,103 +915,17 @@ class CaveMapPainter extends CustomPainter {
     }
   }
 
-  /// Draw plan view (overhead, north-up)
-  void _drawPlanView(Canvas canvas) {
-    final points = _calculatePlanCoordinates();
-
-    if (points.isEmpty) return;
-
-    // Draw survey line
-    _drawSurveyLine(canvas, points);
-
-    // Draw passage walls (left/right)
-    _drawPlanPassageWalls(canvas, points);
-
-    // Draw points with labels
-    _drawPointsWithLabels(canvas, points);
-
-    // Draw start point marker
-    _drawStartPoint(canvas, points.first);
-  }
-
-  /// Draw elevation view (vertical profile)
-  void _drawElevationView(Canvas canvas) {
-    final points = _calculateElevationCoordinates();
-
-    if (points.isEmpty) return;
-
-    // Draw survey line
-    _drawSurveyLine(canvas, points);
-
-    // Draw passage height (up/down)
-    _drawElevationPassageHeight(canvas, points);
-
-    // Draw points with labels
-    _drawPointsWithLabels(canvas, points);
-
-    // Draw start point marker
-    _drawStartPoint(canvas, points.first);
-  }
-
-  /// Calculate plan view coordinates (heading + distance → XY)
-  List<Offset> _calculatePlanCoordinates() {
-    final points = <Offset>[];
-    double x = 0.0;
-    double y = 0.0;
-
-    for (int i = 0; i < surveyData.length; i++) {
-      if (i > 0) {
-        final deltaDistance =
-            surveyData[i].distance - surveyData[i - 1].distance;
-        // Use heading from point i-1 (the starting point of this leg)
-        final headingRad = surveyData[i - 1].heading * math.pi / 180;
-
-        // North is up (negative Y), East is right (positive X)
-        x += deltaDistance * math.sin(headingRad);
-        y -= deltaDistance * math.cos(headingRad);
-      }
-
-      points.add(Offset(x, y));
-    }
-
-    return points;
-  }
-
-  /// Calculate elevation view coordinates (distance → X, depth → Y)
-  List<Offset> _calculateElevationCoordinates() {
-    final points = <Offset>[];
-    double totalDist = 0.0;
-
-    for (int i = 0; i < surveyData.length; i++) {
-      if (i > 0) {
-        totalDist += surveyData[i].distance - surveyData[i - 1].distance;
-      }
-
-      // Y is depth (positive downward in cave convention)
-      final y = surveyData[i].depth;
-      points.add(Offset(totalDist, y));
-    }
-
-    return points;
-  }
-
   void _drawGrid(Canvas canvas, Size size) {
-    // Grid spacing: use 1m when zoomed in, 10m when zoomed out
-    // Switch at scale = 10 (when 10m would be 100 pixels)
     final gridSpacing = scale >= 10.0 ? 1.0 : 10.0;
 
     final gridPaint = Paint()
       ..color = Colors.grey.withOpacity(0.2)
-      ..strokeWidth = 1.5 / scale; // 1.5 screen pixels constant width
+      ..strokeWidth = 1.5 / scale;
 
-    // Calculate visible range in world coordinates
-    // The canvas has been: translated to center, scaled, rotated, then offset translated
-    // So we need to work backwards from screen bounds to world bounds
     final halfWidth = size.width / 2 / scale;
     final halfHeight = size.height / 2 / scale;
-    final margin = math.max(halfWidth, halfHeight) * 0.5; // Extra margin
+    final margin = math.max(halfWidth, halfHeight) * 0.5;
 
-    // The offset moves the world, so visible center in world coords is -offset
     final centerX = -offset.dx;
     final centerY = -offset.dy;
 
@@ -901,36 +938,104 @@ class CaveMapPainter extends CustomPainter {
     final endY =
         ((centerY + halfHeight + margin) / gridSpacing).ceil() * gridSpacing;
 
-    // Vertical lines - draw in world space
     for (double x = startX; x <= endX; x += gridSpacing) {
       canvas.drawLine(Offset(x, startY), Offset(x, endY), gridPaint);
     }
 
-    // Horizontal lines
     for (double y = startY; y <= endY; y += gridSpacing) {
       canvas.drawLine(Offset(startX, y), Offset(endX, y), gridPaint);
     }
   }
 
-  void _drawSurveyLine(Canvas canvas, List<Offset> points) {
-    if (points.length < 2) return;
+  /// Compute station positions by BFS over leg graph
+  Map<int, Offset> _computePositions() {
+    if (stations.isEmpty) return {};
 
+    final stationMap = {for (final s in stations) s.id: s};
+    final positions = <int, Offset>{};
+    final adjacency = <int, List<SurveyLeg>>{};
+    for (final leg in legs) {
+      adjacency.putIfAbsent(leg.fromStationId, () => []).add(leg);
+    }
+
+    final startId = stations.first.id!;
+    positions[startId] = viewMode == MapViewMode.plan
+        ? Offset.zero
+        : Offset(0, stations.first.depth);
+    final queue = <int>[startId];
+    double cumulativeDist = 0;
+
+    while (queue.isNotEmpty) {
+      final currentId = queue.removeAt(0);
+      final currentPos = positions[currentId]!;
+
+      for (final leg in adjacency[currentId] ?? []) {
+        if (positions.containsKey(leg.toStationId)) continue;
+        final toStation = stationMap[leg.toStationId];
+        if (toStation == null) continue;
+
+        if (viewMode == MapViewMode.plan) {
+          final headingRad = leg.heading * math.pi / 180;
+          positions[leg.toStationId] = Offset(
+            currentPos.dx + leg.distance * math.sin(headingRad),
+            currentPos.dy - leg.distance * math.cos(headingRad),
+          );
+        } else {
+          cumulativeDist += leg.distance;
+          positions[leg.toStationId] = Offset(cumulativeDist, toStation.depth);
+        }
+        queue.add(leg.toStationId);
+      }
+    }
+
+    // Orphan stations
+    for (final s in stations) {
+      if (!positions.containsKey(s.id)) {
+        positions[s.id!] = viewMode == MapViewMode.plan
+            ? Offset.zero
+            : Offset(0, s.depth);
+      }
+    }
+
+    return positions;
+  }
+
+  void _drawPlanView(Canvas canvas) {
+    final positions = _computePositions();
+    if (positions.isEmpty) return;
+
+    _drawSurveyLegs(canvas, positions);
+    _drawPlanPassageWalls(canvas, positions);
+    _drawStationsWithLabels(canvas, positions);
+    _drawStartPoint(canvas, positions[stations.first.id]!);
+  }
+
+  void _drawElevationView(Canvas canvas) {
+    final positions = _computePositions();
+    if (positions.isEmpty) return;
+
+    _drawSurveyLegs(canvas, positions);
+    _drawElevationPassageHeight(canvas, positions);
+    _drawStationsWithLabels(canvas, positions);
+    _drawStartPoint(canvas, positions[stations.first.id]!);
+  }
+
+  void _drawSurveyLegs(Canvas canvas, Map<int, Offset> positions) {
     final linePaint = Paint()
       ..color = Colors.yellow
       ..strokeWidth = 2 / scale
       ..style = PaintingStyle.stroke;
 
-    final path = Path()..moveTo(points.first.dx, points.first.dy);
-
-    for (int i = 1; i < points.length; i++) {
-      path.lineTo(points[i].dx, points[i].dy);
+    for (final leg in legs) {
+      final from = positions[leg.fromStationId];
+      final to = positions[leg.toStationId];
+      if (from != null && to != null) {
+        canvas.drawLine(from, to, linePaint);
+      }
     }
-
-    canvas.drawPath(path, linePaint);
   }
 
-  /// Draw left/right passage walls in plan view
-  void _drawPlanPassageWalls(Canvas canvas, List<Offset> points) {
+  void _drawPlanPassageWalls(Canvas canvas, Map<int, Offset> positions) {
     final wallPaint = Paint()
       ..color = Colors.blue.withOpacity(0.3)
       ..style = PaintingStyle.fill;
@@ -939,42 +1044,35 @@ class CaveMapPainter extends CustomPainter {
       ..color = Colors.blue.withOpacity(0.5)
       ..strokeWidth = 1 / scale;
 
-    for (int i = 0; i < points.length; i++) {
-      final point = points[i];
-      final surveyPoint = surveyData[i];
+    for (final leg in legs) {
+      // Draw LRUD at the to-station using leg heading
+      final point = positions[leg.toStationId];
+      if (point == null) continue;
+      if (leg.left <= 0 && leg.right <= 0) continue;
 
-      // Draw walls for points with left/right dimensions
-      if (surveyPoint.left > 0 || surveyPoint.right > 0) {
-        final headingRad = surveyPoint.heading * math.pi / 180;
-        final perpRad = headingRad + math.pi / 2; // Perpendicular to heading
+      final headingRad = leg.heading * math.pi / 180;
+      final perpRad = headingRad + math.pi / 2;
 
-        // Calculate left and right wall endpoints (in meters)
-        // Right perpendicular in screen coords: (sin(perpRad), -cos(perpRad))
-        // Left is the negation of that
+      if (leg.left > 0) {
         final leftOffset = Offset(
-          -math.sin(perpRad) * surveyPoint.left,
-          math.cos(perpRad) * surveyPoint.left,
+          -math.sin(perpRad) * leg.left,
+          math.cos(perpRad) * leg.left,
         );
+        canvas.drawCircle(point + leftOffset, 3 / scale, wallPaint);
+        canvas.drawLine(point, point + leftOffset, wallLinePaint);
+      }
+      if (leg.right > 0) {
         final rightOffset = Offset(
-          math.sin(perpRad) * surveyPoint.right,
-          -math.cos(perpRad) * surveyPoint.right,
+          math.sin(perpRad) * leg.right,
+          -math.cos(perpRad) * leg.right,
         );
-
-        // Draw wall endpoints
-        if (surveyPoint.left > 0) {
-          canvas.drawCircle(point + leftOffset, 3 / scale, wallPaint);
-          canvas.drawLine(point, point + leftOffset, wallLinePaint);
-        }
-        if (surveyPoint.right > 0) {
-          canvas.drawCircle(point + rightOffset, 3 / scale, wallPaint);
-          canvas.drawLine(point, point + rightOffset, wallLinePaint);
-        }
+        canvas.drawCircle(point + rightOffset, 3 / scale, wallPaint);
+        canvas.drawLine(point, point + rightOffset, wallLinePaint);
       }
     }
   }
 
-  /// Draw up/down passage height in elevation view
-  void _drawElevationPassageHeight(Canvas canvas, List<Offset> points) {
+  void _drawElevationPassageHeight(Canvas canvas, Map<int, Offset> positions) {
     final wallPaint = Paint()
       ..color = Colors.blue.withOpacity(0.3)
       ..style = PaintingStyle.fill;
@@ -983,48 +1081,50 @@ class CaveMapPainter extends CustomPainter {
       ..color = Colors.blue.withOpacity(0.5)
       ..strokeWidth = 1 / scale;
 
-    for (int i = 0; i < points.length; i++) {
-      final point = points[i];
-      final surveyPoint = surveyData[i];
+    for (final leg in legs) {
+      final point = positions[leg.toStationId];
+      if (point == null) continue;
 
-      // Draw height for points with up/down dimensions
-      if (surveyPoint.up > 0 || surveyPoint.down > 0) {
-        // Vertical lines for up/down (in meters)
-        final upOffset = Offset(0, -surveyPoint.up);
-        final downOffset = Offset(0, surveyPoint.down);
-
-        // Draw endpoints
-        if (surveyPoint.up > 0) {
-          canvas.drawCircle(point + upOffset, 3 / scale, wallPaint);
-          canvas.drawLine(point, point + upOffset, wallLinePaint);
-        }
-        if (surveyPoint.down > 0) {
-          canvas.drawCircle(point + downOffset, 3 / scale, wallPaint);
-          canvas.drawLine(point, point + downOffset, wallLinePaint);
-        }
+      if (leg.up > 0) {
+        final upOffset = Offset(0, -leg.up);
+        canvas.drawCircle(point + upOffset, 3 / scale, wallPaint);
+        canvas.drawLine(point, point + upOffset, wallLinePaint);
+      }
+      if (leg.down > 0) {
+        final downOffset = Offset(0, leg.down);
+        canvas.drawCircle(point + downOffset, 3 / scale, wallPaint);
+        canvas.drawLine(point, point + downOffset, wallLinePaint);
       }
     }
   }
 
-  /// Draw points with labels
-  void _drawPointsWithLabels(Canvas canvas, List<Offset> points) {
-    for (int i = 0; i < points.length; i++) {
-      final point = points[i];
-      final surveyPoint = surveyData[i];
+  void _drawStationsWithLabels(Canvas canvas, Map<int, Offset> positions) {
+    for (final station in stations) {
+      final point = positions[station.id];
+      if (point == null) continue;
 
-      // Draw point (size scales with zoom)
+      final isActive = station.id == activeStationId;
+
+      // Draw active station highlight
+      if (isActive) {
+        final ringPaint = Paint()
+          ..color = Colors.orange
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 4 / scale;
+        canvas.drawCircle(point, 14 / scale, ringPaint);
+      }
+
       final pointPaint = Paint()
-        ..color = Colors.green
+        ..color = isActive ? Colors.orange : Colors.green
         ..style = PaintingStyle.fill;
 
       canvas.drawCircle(point, 5 / scale, pointPaint);
 
-      // Draw label with background
       final textSpan = TextSpan(
-        text: '${surveyPoint.recordNumber}',
-        style: TextStyle(
+        text: '${station.number}',
+        style: const TextStyle(
           color: Colors.white,
-          fontSize: 11 / scale,
+          fontSize: 14,
           fontWeight: FontWeight.bold,
         ),
       );
@@ -1036,26 +1136,30 @@ class CaveMapPainter extends CustomPainter {
 
       textPainter.layout();
 
-      // Label background
       final labelOffset = Offset(point.dx + 8 / scale, point.dy - 8 / scale);
+
+      canvas.save();
+      canvas.translate(labelOffset.dx, labelOffset.dy);
+      canvas.scale(1 / scale);
+
       final bgRect = Rect.fromLTWH(
-        labelOffset.dx - 2 / scale,
-        labelOffset.dy - 2 / scale,
-        textPainter.width,
-        textPainter.height,
+        -2,
+        -2,
+        textPainter.width + 4,
+        textPainter.height + 4,
       );
 
       final bgPaint = Paint()
-        ..color = Colors.black.withOpacity(0.7)
+        ..color = Colors.black.withOpacity(0.85)
         ..style = PaintingStyle.fill;
 
       canvas.drawRRect(
-        RRect.fromRectAndRadius(bgRect, Radius.circular(3 / scale)),
+        RRect.fromRectAndRadius(bgRect, const Radius.circular(3)),
         bgPaint,
       );
 
-      // Paint label
-      textPainter.paint(canvas, labelOffset);
+      textPainter.paint(canvas, Offset.zero);
+      canvas.restore();
     }
   }
 
@@ -1091,11 +1195,13 @@ class CaveMapPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(CaveMapPainter oldDelegate) {
-    return oldDelegate.surveyData != surveyData ||
+    return oldDelegate.stations != stations ||
+        oldDelegate.legs != legs ||
         oldDelegate.scale != scale ||
         oldDelegate.offset != offset ||
         oldDelegate.rotation != rotation ||
-        oldDelegate.viewMode != viewMode;
+        oldDelegate.viewMode != viewMode ||
+        oldDelegate.activeStationId != activeStationId;
   }
 }
 

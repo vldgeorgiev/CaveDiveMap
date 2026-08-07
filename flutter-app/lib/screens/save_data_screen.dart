@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/survey_data.dart';
+import '../models/station.dart';
 import '../services/storage_service.dart';
 import '../services/magnetometer_service.dart';
 import '../services/button_customization_service.dart';
@@ -130,28 +130,45 @@ class _SaveDataScreenState extends State<SaveDataScreen> {
       down: _down,
     );
 
-    final manualPoint = SurveyData(
-      recordNumber: magnetometerService.currentPointNumber + 1,
-      distance: magnetometerService.totalDistance,
-      heading: widget.capturedHeading, // Use static captured heading
-      depth: _depth, // Use manually entered depth
-      left: _left,
-      right: _right,
-      up: _up,
-      down: _down,
-      rtype: 'manual',
-      timestamp: DateTime.now(),
+    final now = DateTime.now();
+    final stationNumber = storageService.nextStationNumber;
+
+    final station = Station(
+      number: stationNumber,
+      depth: _depth,
+      timestamp: now,
     );
 
-    await storageService.saveSurveyPoint(manualPoint);
+    final stationId = await storageService.addStation(station);
 
-    // Increment point counter (manual point counts as a point)
+    // Create leg from current departure station if one exists
+    final departureId = storageService.currentDepartureStationId;
+    if (departureId != null) {
+      final legDistance = magnetometerService.totalDistance - storageService.departureDistance;
+      final leg = SurveyLeg(
+        fromStationId: departureId,
+        toStationId: stationId,
+        distance: legDistance,
+        heading: widget.capturedHeading,
+        left: _left,
+        right: _right,
+        up: _up,
+        down: _down,
+        timestamp: now,
+      );
+      await storageService.addSurveyLeg(leg);
+    }
+
+    // New station becomes the departure point; reset leg distance tracking
+    await storageService.setCurrentDepartureStationId(stationId);
+    await storageService.setDepartureDistance(magnetometerService.totalDistance);
+
     magnetometerService.incrementPointNumber();
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Manual point ${manualPoint.recordNumber} saved'),
+          content: Text('Station $stationNumber saved'),
           backgroundColor: AppColors.actionSave,
         ),
       );
@@ -165,7 +182,7 @@ class _SaveDataScreenState extends State<SaveDataScreen> {
       backgroundColor: AppColors.backgroundPrimary,
       appBar: AppBar(
         title: Text(
-          'Save Manual Point',
+          'Save Station',
           style: AppTextStyles.body.copyWith(
             color: AppColors.textPrimary,
             fontWeight: FontWeight.bold,
@@ -174,8 +191,15 @@ class _SaveDataScreenState extends State<SaveDataScreen> {
         backgroundColor: AppColors.backgroundPrimary,
         elevation: 0,
       ),
-      body: Consumer2<MagnetometerService, ButtonCustomizationService>(
-        builder: (context, magnetometer, buttonService, child) {
+      body: Consumer3<MagnetometerService, ButtonCustomizationService, StorageService>(
+        builder: (context, magnetometer, buttonService, storageService2, child) {
+          final departureId = storageService2.currentDepartureStationId;
+          final departureStation = departureId != null
+              ? storageService2.getStationById(departureId)
+              : null;
+          final activeLabel = departureStation != null
+              ? '${departureStation.number}'
+              : '—';
           return Stack(
             children: [
               // Main content
@@ -191,8 +215,8 @@ class _SaveDataScreenState extends State<SaveDataScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             _buildInfoRow(
-                              'Point Number',
-                              '${magnetometer.currentPointNumber + 1}',
+                              'Active Station',
+                              activeLabel,
                             ),
                             const SizedBox(height: 8),
                             _buildInfoRow(
