@@ -74,25 +74,11 @@ class MagnetometerService extends ChangeNotifier {
   DateTime? _lastRotationTime;
   double _averageRotationInterval = 0.0;
   bool _pendingMeasurementBlocked = false;
+  double _legLength = 0.0;
 
   MagnetometerService(this._storageService) {
-    // Initialize point counter from persisted data to maintain continuity
     _currentPointNumber = _storageService.stations.length;
 
-    // Restore cumulative distance from legs or departure distance (whichever is greater)
-    double total = 0.0;
-    for (final leg in _storageService.legs) {
-      total += leg.distance;
-    }
-    _currentDistance = total > _storageService.departureDistance
-        ? total
-        : _storageService.departureDistance;
-
-    // Sync departure so the leg starts at 0 on restart
-    _storageService.setDepartureDistance(_currentDistance);
-
-    // Auto-start listening and recording since the app has no manual start
-    // control. This ensures rotation detection begins immediately on launch.
     startListening();
     startRecording();
   }
@@ -100,9 +86,9 @@ class MagnetometerService extends ChangeNotifier {
   // Getters
   bool get isRecording => _isRecording;
   bool get isMeasurementBlocked => _pendingMeasurementBlocked;
+  double get legLength => _legLength;
   double get currentDistance => _currentDistance;
   double get currentDepth => _currentDepth;
-  double get totalDistance => _currentDistance;
   int get rotationCount => _rotationCount;
   int get currentPointNumber => _currentPointNumber;
   double get magneticStrength => _magneticStrength;
@@ -180,6 +166,7 @@ class MagnetometerService extends ChangeNotifier {
     _currentHeading = 0.0;
     _currentPointNumber = 0;
     _rotationCount = 0;
+    _legLength = 0.0;
     _lastRotationTime = null;
     _averageRotationInterval = 0.0;
 
@@ -447,7 +434,6 @@ class MagnetometerService extends ChangeNotifier {
 
   /// Handle rotation detection
   void _onRotationDetected() {
-    // Block measurement until a station is saved (start of survey or after station switch)
     if (_storageService.needsLegStart) {
       _pendingMeasurementBlocked = true;
       notifyListeners();
@@ -455,15 +441,12 @@ class MagnetometerService extends ChangeNotifier {
     }
 
     _pendingMeasurementBlocked = false;
-    // Note: _rotationCount already incremented by caller
 
-    // Update rotation timing statistics
     final now = DateTime.now();
     if (_lastRotationTime != null) {
       final interval =
           now.difference(_lastRotationTime!).inMilliseconds / 1000.0;
 
-      // Exponential moving average for smoother interval
       if (_averageRotationInterval == 0.0) {
         _averageRotationInterval = interval;
       } else {
@@ -473,13 +456,18 @@ class MagnetometerService extends ChangeNotifier {
     }
     _lastRotationTime = now;
 
-    // Calculate new distance (add to existing distance)
+    _legLength += _wheelCircumference;
     _currentDistance += _wheelCircumference;
     _currentPointNumber++;
 
-    // Auto-save survey point
     _autoSaveSurveyPoint();
 
+    notifyListeners();
+  }
+
+  /// Reset leg length (after save or station switch)
+  void resetLegLength() {
+    _legLength = 0.0;
     notifyListeners();
   }
 

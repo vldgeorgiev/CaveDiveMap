@@ -144,7 +144,7 @@ class _SaveDataScreenState extends State<SaveDataScreen> {
     // Create leg from current departure station if one exists
     final departureId = storageService.currentDepartureStationId;
     if (departureId != null) {
-      final legDistance = magnetometerService.totalDistance - storageService.departureDistance;
+      final legDistance = magnetometerService.legLength;
       final leg = SurveyLeg(
         fromStationId: departureId,
         toStationId: stationId,
@@ -157,11 +157,11 @@ class _SaveDataScreenState extends State<SaveDataScreen> {
         timestamp: now,
       );
       await storageService.addSurveyLeg(leg);
+      magnetometerService.resetLegLength();
     }
 
-    // New station becomes the departure point; reset leg distance tracking
+    // New station becomes the departure point
     await storageService.setCurrentDepartureStationId(stationId);
-    await storageService.setDepartureDistance(magnetometerService.totalDistance);
 
     magnetometerService.incrementPointNumber();
 
@@ -220,8 +220,8 @@ class _SaveDataScreenState extends State<SaveDataScreen> {
                             ),
                             const SizedBox(height: 8),
                             _buildInfoRow(
-                              'Distance',
-                              '${magnetometer.totalDistance.toStringAsFixed(2)} m',
+                              'Leg distance',
+                              '${magnetometer.legLength.toStringAsFixed(2)} m',
                             ),
                             const SizedBox(height: 8),
                             _buildInfoRow(

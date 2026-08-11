@@ -326,14 +326,19 @@ class _MainScreenState extends State<MainScreen>
 
                               Builder(builder: (context) {
                                 final storage = context.watch<StorageService>();
-                                final legDistance = magnetometer.totalDistance - storage.departureDistance;
                                 return Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     _buildLargeDataRow(
                                       'Leg distance',
-                                      '${legDistance.toStringAsFixed(2)} m',
+                                      '${magnetometer.legLength.toStringAsFixed(2)} m',
                                       AppTextStyles.largeTitle,
+                                    ),
+                                    const SizedBox(height: AppSpacing.small),
+                                    _buildLargeDataRow(
+                                      'Total',
+                                      '${(storage.totalLength + magnetometer.legLength).toStringAsFixed(1)} m',
+                                      AppTextStyles.body,
                                     ),
                                     const SizedBox(height: AppSpacing.small),
                                     _buildLargeDataRow(

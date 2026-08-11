@@ -31,7 +31,6 @@ class StorageService extends ChangeNotifier {
   List<AutoPoint> _autoPoints = [];
   int _stationCounter = 1;
   int? _currentDepartureStationId;
-  double _departureDistance = 0.0;
   bool _needsLegStart = true;
 
   List<Station> get stations => List.unmodifiable(_stations);
@@ -39,25 +38,17 @@ class StorageService extends ChangeNotifier {
   List<AutoPoint> get autoPoints => List.unmodifiable(_autoPoints);
   int get nextStationNumber => _stationCounter;
   int? get currentDepartureStationId => _currentDepartureStationId;
-  double get departureDistance => _departureDistance;
-  /// True when measurement should be blocked (no departure station, or station just switched)
   bool get needsLegStart => _needsLegStart;
+  double get totalLength => _legs.fold(0.0, (sum, l) => sum + l.distance);
 
-  /// Legacy compatibility — returns stations as the "survey points"
   List<Station> get surveyPoints => stations;
 
-  /// Initialize Drift database and SharedPreferences
-  ///
-  /// Opens persistent storage and loads all existing data.
-  /// Survey data automatically persists across app restarts.
   Future<void> initialize() async {
     _prefs = await SharedPreferences.getInstance();
     _database = CaveSurveyDatabase(await _createDatabaseConnection());
     await _loadData();
     await _loadStationCounter();
     _currentDepartureStationId = _prefs!.getInt('currentDepartureStationId');
-    _departureDistance = _prefs!.getDouble('departureDistance') ?? 0.0;
-    // If stations exist and a departure station is set, leg is already started
     _needsLegStart = _stations.isEmpty || _currentDepartureStationId == null;
   }
 
@@ -210,20 +201,12 @@ class StorageService extends ChangeNotifier {
 
   Future<void> setCurrentDepartureStationId(int? stationId, {bool isStationSwitch = false}) async {
     _currentDepartureStationId = stationId;
-    if (isStationSwitch) {
-      _needsLegStart = true;
-    }
     notifyListeners();
     if (stationId != null) {
       await _prefs?.setInt('currentDepartureStationId', stationId);
     } else {
       await _prefs?.remove('currentDepartureStationId');
     }
-  }
-
-  Future<void> setDepartureDistance(double distance) async {
-    _departureDistance = distance;
-    await _prefs?.setDouble('departureDistance', distance);
   }
 
   // ========== Clear All ==========
@@ -240,11 +223,9 @@ class StorageService extends ChangeNotifier {
     _autoPoints.clear();
     _stationCounter = 1;
     _currentDepartureStationId = null;
-    _departureDistance = 0.0;
     _needsLegStart = true;
     await _prefs?.setInt('stationCounter', _stationCounter);
     await _prefs?.remove('currentDepartureStationId');
-    await _prefs?.remove('departureDistance');
 
     await _prefs?.remove('lastDepth');
     await _prefs?.remove('lastLeft');

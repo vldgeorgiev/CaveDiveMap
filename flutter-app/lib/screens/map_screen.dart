@@ -181,9 +181,8 @@ class _MapScreenState extends State<MapScreen> {
                   onLongPressStart: (details) {
                     if (_isOverlayInteractionActive) return;
 
-                    // Block station switch if distance measured since last save
                     final magnetometer = context.read<MagnetometerService>();
-                    if (magnetometer.totalDistance > storageService.departureDistance) {
+                    if (magnetometer.legLength >= 1.0) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('Save measured section before switching stations'),
@@ -193,6 +192,8 @@ class _MapScreenState extends State<MapScreen> {
                       );
                       return;
                     }
+                    // Discard any sub-meter residual
+                    magnetometer.resetLegLength();
 
                     final renderBox = context.findRenderObject() as RenderBox;
                     final size = renderBox.size;
@@ -207,27 +208,7 @@ class _MapScreenState extends State<MapScreen> {
                     );
                     final hitId = painter.hitTestStation(details.localPosition, size);
                     if (hitId != null) {
-                      // BFS to compute cumulative distance to the selected station
-                      final visited = <int>{};
-                      final queue = <int>[stations.first.id!];
-                      final distTo = <int, double>{stations.first.id!: 0};
-                      final adj = <int, List<SurveyLeg>>{};
-                      for (final l in surveyLegs) {
-                        adj.putIfAbsent(l.fromStationId, () => []).add(l);
-                      }
-                      while (queue.isNotEmpty) {
-                        final cur = queue.removeAt(0);
-                        if (visited.contains(cur)) continue;
-                        visited.add(cur);
-                        for (final l in adj[cur] ?? []) {
-                          if (!visited.contains(l.toStationId)) {
-                            distTo[l.toStationId] = (distTo[cur] ?? 0) + l.distance;
-                            queue.add(l.toStationId);
-                          }
-                        }
-                      }
                       storageService.setCurrentDepartureStationId(hitId, isStationSwitch: true);
-                      storageService.setDepartureDistance(magnetometer.totalDistance);
                       setState(() {});
                     }
                   },
