@@ -336,12 +336,6 @@ class _MainScreenState extends State<MainScreen>
                                     ),
                                     const SizedBox(height: AppSpacing.small),
                                     _buildLargeDataRow(
-                                      'Total',
-                                      '${(storage.totalLength + magnetometer.legLength).toStringAsFixed(1)} m',
-                                      AppTextStyles.body,
-                                    ),
-                                    const SizedBox(height: AppSpacing.small),
-                                    _buildLargeDataRow(
                                       'Active station',
                                       '${storage.currentDepartureStationId != null ? storage.getStationById(storage.currentDepartureStationId!)?.number ?? '—' : '—'}',
                                       AppTextStyles.body,
