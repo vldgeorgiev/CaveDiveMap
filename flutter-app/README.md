@@ -4,19 +4,22 @@ Cross-platform cave diving survey application for iOS and Android.
 
 ## Overview
 
-CaveDiveMap is a cross-platform rewrite of the iOS-only CaveDiveMap application. It uses magnetometer-based distance measurement to survey underwater cave passages.
+CaveDiveMap is a cross-platform rewrite of the iOS-only CaveDiveMap application. It uses magnetometer-based distance measurement to survey underwater cave passages. Supports branching survey topologies with explicit station-to-station legs.
 
 ## Features
 
 - **Magnetometer-based Distance Measurement**: 3D-printed wheel with magnet rotates as diver moves along guideline
-- **Automatic Point Collection**: Auto-saves survey points every 10 wheel rotations (2.63m)
-- **Compass Heading**: Magnetic heading from phone sensors (saved with auto-points)
-- **Manual Depth Control**: Adjustable via waterproof case buttons
-- **Data Persistence**: Survey data automatically saved and persists across app restarts
-- **Data Export**: CSV and Therion cave survey formats (saved to Documents/CaveDiveMap)
-- **Reset Workflow**: 10-second hold to reset with automatic backup export
-- **Debug Screen**: Table view of all survey points for data verification
-- **Live Visualization**: 2D map view during dives
+- **Station & Leg Model**: Manual stations with sequential numbering; directed legs with distance, heading, and LRUD
+- **Branching Surveys**: Switch active station on the map to start a new branch from any existing station
+- **Active Station Selection**: Long-press a station on the map to set it as the departure point (large touch target for gloved use)
+- **Compass Heading**: Magnetic heading from phone sensors (saved per leg)
+- **LRUD Passage Dimensions**: Left, Right, Up, Down measurements stored per leg
+- **Data Persistence**: Stations and legs automatically saved to SQLite (Drift)
+- **Data Export**: CSV (sectioned format) and Therion cave survey formats
+- **Data Import**: CSV import with station/leg reconstruction
+- **Live Visualization**: 2D map (plan and elevation views) with passage walls
+- **Reset Workflow**: Hold to reset with automatic backup export
+- **Debug Screen**: Table view of stations and legs for data verification
 - **Configurable UI**: Fullscreen mode and keep screen on settings
 - **Cross-Platform**: Works on both iOS and Android
 
@@ -29,16 +32,26 @@ CaveDiveMap is a cross-platform rewrite of the iOS-only CaveDiveMap application.
 
 ## Architecture
 
+### Data Model
+
+```
+Station     { id, number, depth, timestamp }
+SurveyLeg   { id, fromStationId, toStationId, distance, heading, L, R, U, D, timestamp }
+AutoPoint   { id, distance, heading, depth, timestamp }  (debug only)
+```
+
+Stations are identity + position. Legs are directed edges carrying all measurement data. AutoPoints are debug-only wheel rotation logs.
+
 ### Directory Structure
 
 ```
 lib/
-├── models/          # Data models (SurveyData)
+├── models/          # Data models (Station, SurveyLeg, AutoPoint)
 ├── services/        # Business logic services
-│   ├── storage_service.dart       # Data persistence
-│   ├── magnetometer_service.dart  # Distance measurement
+│   ├── storage_service.dart       # Data persistence (Drift DB + SharedPreferences)
+│   ├── magnetometer_service.dart  # Wheel rotation detection & leg length
 │   ├── compass_service.dart       # Heading tracking
-│   └── export_service.dart        # CSV/Therion export
+│   └── export_service.dart        # CSV/Therion export & import
 ├── screens/         # UI screens
 ├── widgets/         # Reusable widgets
 └── main.dart        # App entry point
@@ -53,55 +66,57 @@ lib/
 
 ## Usage
 
-### Data Collection
+### Survey Workflow
 
-1. **Auto Points**: System automatically saves survey points every wheel rotation
-   - Includes distance, compass heading, and depth
-   - Point counter increments automatically
-2. **Manual Points**: Navigate to "Save Data" screen to add manual measurements
-   - Enter left, right, up, down dimensions
-   - Manual points include all auto-point data plus dimensions
-3. **Data Persistence**: All survey data is automatically saved and persists across app restarts
+1. **Save first station**: Before measuring, save an initial station (depth + LRUD)
+2. **Measure**: Wheel rotates as you swim, accumulating leg distance
+3. **Save next station**: Saves a leg (from → to) with distance, heading, and LRUD
+4. **Repeat**: Each save creates a new station and leg from the previous one
+
+### Branching (Split Surveys)
+
+To start a new branch from an existing station:
+
+1. **Long-press** a station marker on the map
+2. The orange ring moves to that station (now the active departure point)
+3. Save a new station — the leg connects from the selected station
+
+**Guards:**
+- Cannot switch if leg distance ≥ 1m (save first)
+- Sub-meter residual is silently discarded on switch
+- Cannot measure before first station is saved
 
 ### Resetting Survey Data
 
 To start a new survey:
 
-1. **Hold Reset Button**: Press and hold the reset button for **6 seconds**
-2. **Automatic Backup**: System automatically exports current data to CSV before clearing
-   - Backup saved to: `Documents/CaveDiveMap/backup_YYYY-MM-DD_HH-mm-ss.csv`
-   - Export path shown in notification for 3 seconds
-3. **Data Cleared**: All survey points are removed after successful backup
-
-**Note**: No confirmation dialog is shown - the several second hold is the safety mechanism.
+1. **Hold Reset Button** for 6 seconds
+2. System automatically exports current data to CSV before clearing
+3. All stations, legs, and auto-points are removed
 
 ### Exporting Data
 
 Export files are saved to accessible locations:
 
 - **Android**: `/storage/emulated/0/Documents/CaveDiveMap/`
-  - Accessible via Files app or any file manager
-  - Requires storage permission on Android 12 and below
 - **iOS**: `Documents/CaveDiveMap/`
-  - Accessible via Files app
 
 Export formats:
-- **CSV**: Standard format with all survey point data
-- **Therion**: Cave survey software format (.th files)
+- **CSV**: Sectioned format with `[Stations]` and `[Legs]` headers
+- **Therion**: Cave survey format (.th) with from→to legs and LRUD dimensions
 
-After export, the file path is displayed in a notification for 3 seconds.
+### Importing Data
+
+1. Open **Settings** → tap **Import CSV**
+2. Select a CSV file in the sectioned format
+3. Confirm the count of stations and legs
+4. Data is imported with new database IDs; departure set to last station
 
 ### Debug Screen
 
-To view all collected survey data:
-
-1. Open **Settings**
-2. Tap **Debug: Survey Data** (under Interface section)
-3. View table with all survey points:
-   - Record #, Distance, Azimuth, Depth
-   - Left, Right, Up, Down dimensions
-   - Point type (auto/manual)
-   - Color-coded rows by type
+Open **Settings** → **Debug: Survey Data** to view:
+- **Stations table**: #, Depth
+- **Legs table**: From, To, Distance, Azimuth, L, R, U, D
 
 ## Development
 
