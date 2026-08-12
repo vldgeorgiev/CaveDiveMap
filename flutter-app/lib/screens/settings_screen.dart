@@ -137,8 +137,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     try {
       final timestamp = DateTime.now();
+      final surveyName = _surveyNameController.text.isNotEmpty
+          ? _surveyNameController.text
+          : settings.surveyName;
       final timeString =
-          '${settings.surveyName}_'
+          '${surveyName}_'
           '${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')}_'
           '${timestamp.hour.toString().padLeft(2, '0')}-${timestamp.minute.toString().padLeft(2, '0')}-${timestamp.second.toString().padLeft(2, '0')}';
 
