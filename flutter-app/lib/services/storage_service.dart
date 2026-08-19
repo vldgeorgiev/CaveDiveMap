@@ -31,6 +31,7 @@ class StorageService extends ChangeNotifier {
   List<AutoPoint> _autoPoints = [];
   int _stationCounter = 1;
   int? _currentDepartureStationId;
+  double? _departureHeading;
   bool _needsLegStart = true;
 
   List<Station> get stations => List.unmodifiable(_stations);
@@ -38,6 +39,7 @@ class StorageService extends ChangeNotifier {
   List<AutoPoint> get autoPoints => List.unmodifiable(_autoPoints);
   int get nextStationNumber => _stationCounter;
   int? get currentDepartureStationId => _currentDepartureStationId;
+  double? get departureHeading => _departureHeading;
   bool get needsLegStart => _needsLegStart;
   double get totalLength => _legs.fold(0.0, (sum, l) => sum + l.distance);
 
@@ -49,6 +51,7 @@ class StorageService extends ChangeNotifier {
     await _loadData();
     await _loadStationCounter();
     _currentDepartureStationId = _prefs!.getInt('currentDepartureStationId');
+    _departureHeading = _prefs!.getDouble('departureHeading');
     _needsLegStart = _stations.isEmpty || _currentDepartureStationId == null;
   }
 
@@ -209,6 +212,11 @@ class StorageService extends ChangeNotifier {
     }
   }
 
+  Future<void> setDepartureHeading(double heading) async {
+    _departureHeading = heading;
+    await _prefs?.setDouble('departureHeading', heading);
+  }
+
   // ========== Clear All ==========
 
   Future<void> clearAllSurveyData() async {
@@ -223,9 +231,11 @@ class StorageService extends ChangeNotifier {
     _autoPoints.clear();
     _stationCounter = 1;
     _currentDepartureStationId = null;
+    _departureHeading = null;
     _needsLegStart = true;
     await _prefs?.setInt('stationCounter', _stationCounter);
     await _prefs?.remove('currentDepartureStationId');
+    await _prefs?.remove('departureHeading');
 
     await _prefs?.remove('lastDepth');
     await _prefs?.remove('lastLeft');

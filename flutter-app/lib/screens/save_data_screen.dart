@@ -143,13 +143,13 @@ class _SaveDataScreenState extends State<SaveDataScreen> {
 
     // Create leg from current departure station if one exists
     final departureId = storageService.currentDepartureStationId;
-    if (departureId != null) {
+    if (departureId != null && storageService.departureHeading != null) {
       final legDistance = magnetometerService.legLength;
       final leg = SurveyLeg(
         fromStationId: departureId,
         toStationId: stationId,
         distance: legDistance,
-        heading: widget.capturedHeading,
+        heading: storageService.departureHeading!,
         left: _left,
         right: _right,
         up: _up,
@@ -160,6 +160,8 @@ class _SaveDataScreenState extends State<SaveDataScreen> {
       magnetometerService.resetLegLength();
     }
 
+    // Capture current heading as departure heading for the next leg
+    await storageService.setDepartureHeading(widget.capturedHeading);
     // New station becomes the departure point
     await storageService.setCurrentDepartureStationId(stationId);
 
