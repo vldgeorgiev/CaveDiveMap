@@ -121,6 +121,24 @@ class _SaveDataScreenState extends State<SaveDataScreen> {
     final magnetometerService = context.read<MagnetometerService>();
     final storageService = context.read<StorageService>();
 
+    // After a station switch, first Save just captures departure heading
+    if (storageService.needsLegStart && storageService.currentDepartureStationId != null) {
+      await storageService.setDepartureHeading(widget.capturedHeading);
+      magnetometerService.resetLegLength();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Heading captured — start measuring'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 2),
+          ),
+        );
+        Navigator.pop(context);
+      }
+      return;
+    }
+
     // Save the entered values for next time
     await storageService.saveLastEnteredValues(
       depth: _depth,

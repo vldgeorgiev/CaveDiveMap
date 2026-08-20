@@ -204,6 +204,10 @@ class StorageService extends ChangeNotifier {
 
   Future<void> setCurrentDepartureStationId(int? stationId, {bool isStationSwitch = false}) async {
     _currentDepartureStationId = stationId;
+    if (isStationSwitch) {
+      _needsLegStart = true;
+      _departureHeading = null;
+    }
     notifyListeners();
     if (stationId != null) {
       await _prefs?.setInt('currentDepartureStationId', stationId);
@@ -214,6 +218,7 @@ class StorageService extends ChangeNotifier {
 
   Future<void> setDepartureHeading(double heading) async {
     _departureHeading = heading;
+    _needsLegStart = false;
     await _prefs?.setDouble('departureHeading', heading);
   }
 
